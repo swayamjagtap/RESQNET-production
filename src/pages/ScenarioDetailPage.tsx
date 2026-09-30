@@ -2,22 +2,35 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import type { Scenario, Hospital, Ambulance, HospitalInsert, AmbulanceInsert, ScenarioUpdate } from '../lib/types';
+import type {
+  Scenario,
+  Hospital,
+  Ambulance,
+  HospitalInsert,
+  AmbulanceInsert,
+  ScenarioUpdate,
+} from '../lib/types';
 import { DISASTER_TYPES } from '../lib/types';
 import { HospitalForm } from '../components/HospitalForm';
 import { AmbulanceForm } from '../components/AmbulanceForm';
+import { LocationPicker } from '../components/LocationPicker';
+import type { LatLng, ContextMarker } from '../components/LocationPicker';
 import {
   validateScenarioTitle,
   validateDisasterType,
-  validateLat,
-  validateLng,
   validateCasualtyCount,
 } from '../lib/validators';
 import { ConfigNotice } from '../components/ConfigNotice';
 
-// ─── Helpers ─────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────
 
-function Alert({ type, children }: { type: 'error' | 'info' | 'success' | 'warning'; children: React.ReactNode }) {
+function Alert({
+  type,
+  children,
+}: {
+  type: 'error' | 'info' | 'success' | 'warning';
+  children: React.ReactNode;
+}) {
   const icons = { error: '⚠️', info: 'ℹ️', success: '✅', warning: '⚠️' };
   return (
     <div className={`alert alert-${type}`} role={type === 'error' ? 'alert' : 'status'}>
@@ -51,16 +64,18 @@ export const ScenarioDetailPage: React.FC = () => {
   const [settingsSuccess, setSettingsSuccess] = useState<string | null>(null);
   const [savingSettings, setSavingSettings] = useState(false);
 
-  // Settings form state
+  // Settings form: title, type, coords via LocationPicker, casualties
   const [title, setTitle] = useState('');
   const [disasterType, setDisasterType] = useState('building_collapse');
-  const [incidentLat, setIncidentLat] = useState('');
-  const [incidentLng, setIncidentLng] = useState('');
+  const [incidentCoords, setIncidentCoords] = useState<LatLng | null>(null);
   const [fracture, setFracture] = useState('0');
   const [bloodLoss, setBloodLoss] = useState('0');
   const [unconscious, setUnconscious] = useState('0');
   const [limbLoss, setLimbLoss] = useState('0');
+
+  // Per-field errors — only shown after blur or submit attempt
   const [settingsFieldErrors, setSettingsFieldErrors] = useState<Record<string, string>>({});
+  const [settingsTouched, setSettingsTouched] = useState<Record<string, boolean>>({});
 
   // Hospitals
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
@@ -78,7 +93,7 @@ export const ScenarioDetailPage: React.FC = () => {
   const [editingAmbulance, setEditingAmbulance] = useState<Ambulance | null>(null);
   const [savingAmbulance, setSavingAmbulance] = useState(false);
 
-  // ─── Load Scenario ──────────────────────────────────────────────
+  // ─── Data loading ─────────────────────────────────────────────────
 
   const loadScenario = useCallback(async () => {
     if (!supabase || !scenarioId) return;
@@ -97,8 +112,11 @@ export const ScenarioDetailPage: React.FC = () => {
       setScenario(s);
       setTitle(s.title);
       setDisasterType(s.disaster_type ?? 'building_collapse');
-      setIncidentLat(s.incident_lat != null ? String(s.incident_lat) : '');
-      setIncidentLng(s.incident_lng != null ? String(s.incident_lng) : '');
+      setIncidentCoords(
+        s.incident_lat != null && s.incident_lng != null
+          ? { lat: s.incident_lat, lng: s.incident_lng }
+          : null,
+      );
       setFracture(String(s.fracture ?? 0));
       setBloodLoss(String(s.blood_loss ?? 0));
       setUnconscious(String(s.unconscious ?? 0));
@@ -145,22 +163,24 @@ export const ScenarioDetailPage: React.FC = () => {
     }
   }, [authLoading, user, isConfigured, loadScenario, loadHospitals, loadAmbulances]);
 
-  // ─── Settings Save ──────────────────────────────────────────────
+  // ─── Settings save ─────────────────────────────────────────────────
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     setSettingsError(null);
     setSettingsSuccess(null);
 
+    // Mark all touched so inline errors appear
+    setSettingsTouched({
+      title: true, disasterType: true, fracture: true,
+      bloodLoss: true, unconscious: true, limbLoss: true,
+    });
+
     const errs: Record<string, string> = {};
     const titleErr = validateScenarioTitle(title);
     if (titleErr) errs.title = titleErr;
     const dtErr = validateDisasterType(disasterType);
     if (dtErr) errs.disasterType = dtErr;
-    const latErr = validateLat(incidentLat);
-    if (latErr) errs.incidentLat = latErr;
-    const lngErr = validateLng(incidentLng);
-    if (lngErr) errs.incidentLng = lngErr;
     const fracErr = validateCasualtyCount(fracture, 'Fracture');
     if (fracErr) errs.fracture = fracErr;
     const blErr = validateCasualtyCount(bloodLoss, 'Blood loss');
@@ -179,8 +199,8 @@ export const ScenarioDetailPage: React.FC = () => {
     const update: ScenarioUpdate = {
       title: title.trim(),
       disaster_type: disasterType as Scenario['disaster_type'],
-      incident_lat: incidentLat !== '' ? Number(incidentLat) : null,
-      incident_lng: incidentLng !== '' ? Number(incidentLng) : null,
+      incident_lat: incidentCoords?.lat ?? null,
+      incident_lng: incidentCoords?.lng ?? null,
       fracture: Number(fracture),
       blood_loss: Number(bloodLoss),
       unconscious: Number(unconscious),
@@ -201,13 +221,21 @@ export const ScenarioDetailPage: React.FC = () => {
     setSavingSettings(false);
   };
 
-  // ─── Hospitals ──────────────────────────────────────────────────
+  const showSettingsErr = (key: string) =>
+    settingsTouched[key] ? settingsFieldErrors[key] : undefined;
+
+  const markSettingsTouched = (key: string, validator: () => string | null) => {
+    setSettingsTouched((t) => ({ ...t, [key]: true }));
+    const err = validator();
+    setSettingsFieldErrors((prev) => ({ ...prev, [key]: err ?? '' }));
+  };
+
+  // ─── Hospitals ─────────────────────────────────────────────────────
 
   const handleSaveHospital = async (data: Omit<HospitalInsert, 'scenario_id'>) => {
     if (!supabase || !scenarioId) return;
     setSavingHospital(true);
     setHospitalError(null);
-
     if (editingHospital) {
       const { error } = await supabase
         .from('hospitals')
@@ -234,13 +262,12 @@ export const ScenarioDetailPage: React.FC = () => {
     else await loadHospitals();
   };
 
-  // ─── Ambulances ─────────────────────────────────────────────────
+  // ─── Ambulances ────────────────────────────────────────────────────
 
   const handleSaveAmbulance = async (data: Omit<AmbulanceInsert, 'scenario_id'>) => {
     if (!supabase || !scenarioId) return;
     setSavingAmbulance(true);
     setAmbulanceError(null);
-
     if (editingAmbulance) {
       const { error } = await supabase
         .from('ambulances')
@@ -267,15 +294,33 @@ export const ScenarioDetailPage: React.FC = () => {
     else await loadAmbulances();
   };
 
-  // ─── Guards ─────────────────────────────────────────────────────
+  // ─── Build context markers for LocationPicker ──────────────────────
 
-  if (authLoading || loadingScenario) {
-    return <Spinner label="Loading scenario…" />;
-  }
+  const contextMarkers: ContextMarker[] = [
+    ...(hospitals.map((h) => ({
+      kind: 'hospital' as const,
+      lat: h.lat,
+      lng: h.lng,
+      label: h.name,
+    }))),
+    ...(ambulances.map((a) => ({
+      kind: 'ambulance' as const,
+      lat: a.base_lat,
+      lng: a.base_lng,
+      label: a.label,
+    }))),
+  ];
 
-  if (!isConfigured) {
-    return <div className="main-content"><ConfigNotice /></div>;
-  }
+  // Add incident marker for hospital/ambulance pickers
+  const incidentContextMarker: ContextMarker[] = incidentCoords
+    ? [{ kind: 'incident' as const, lat: incidentCoords.lat, lng: incidentCoords.lng, label: 'Incident' }]
+    : [];
+
+  // ─── Guards ────────────────────────────────────────────────────────
+
+  if (authLoading || loadingScenario) return <Spinner label="Loading scenario…" />;
+
+  if (!isConfigured) return <div className="main-content"><ConfigNotice /></div>;
 
   if (!user) {
     return (
@@ -308,7 +353,7 @@ export const ScenarioDetailPage: React.FC = () => {
   const totalCasualties =
     Number(fracture) + Number(bloodLoss) + Number(unconscious) + Number(limbLoss);
 
-  // ─── Render ──────────────────────────────────────────────────────
+  // ─── Render ────────────────────────────────────────────────────────
 
   return (
     <div className="main-content">
@@ -321,7 +366,7 @@ export const ScenarioDetailPage: React.FC = () => {
       <header className="page-header">
         <h1>{scenario?.title}</h1>
         <p className="text-muted" style={{ fontSize: '0.85rem' }}>
-          ID: <code>{scenarioId}</code> •{' '}
+          ID: <code>{scenarioId}</code> ·{' '}
           {scenario?.updated_at
             ? `Last updated ${new Date(scenario.updated_at).toLocaleString()}`
             : `Created ${new Date(scenario?.created_at ?? '').toLocaleString()}`}
@@ -336,78 +381,59 @@ export const ScenarioDetailPage: React.FC = () => {
         {settingsSuccess && <Alert type="success">{settingsSuccess}</Alert>}
 
         <form onSubmit={handleSaveSettings} noValidate>
-          <div className="form-grid-2">
-            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-              <label className="form-label" htmlFor="s-title">Title</label>
-              <input
-                id="s-title"
-                type="text"
-                className={`form-input${settingsFieldErrors.title ? ' input-error' : ''}`}
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                maxLength={255}
-                disabled={savingSettings}
-                aria-describedby={settingsFieldErrors.title ? 's-title-err' : undefined}
-              />
-              {settingsFieldErrors.title && <span id="s-title-err" className="field-error">{settingsFieldErrors.title}</span>}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="s-dtype">Disaster Type</label>
-              <select
-                id="s-dtype"
-                className="form-input"
-                value={disasterType}
-                onChange={(e) => setDisasterType(e.target.value)}
-                disabled={savingSettings}
-              >
-                {DISASTER_TYPES.map((dt) => (
-                  <option key={dt} value={dt}>
-                    {dt.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
-                  </option>
-                ))}
-              </select>
-              {settingsFieldErrors.disasterType && <span className="field-error">{settingsFieldErrors.disasterType}</span>}
-            </div>
-
-            <div className="form-group" />
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="s-lat">Incident Latitude (optional)</label>
-              <input
-                id="s-lat"
-                type="number"
-                step="any"
-                className={`form-input${settingsFieldErrors.incidentLat ? ' input-error' : ''}`}
-                value={incidentLat}
-                onChange={(e) => setIncidentLat(e.target.value)}
-                placeholder="19.1136"
-                disabled={savingSettings}
-              />
-              {settingsFieldErrors.incidentLat && <span className="field-error">{settingsFieldErrors.incidentLat}</span>}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="s-lng">Incident Longitude (optional)</label>
-              <input
-                id="s-lng"
-                type="number"
-                step="any"
-                className={`form-input${settingsFieldErrors.incidentLng ? ' input-error' : ''}`}
-                value={incidentLng}
-                onChange={(e) => setIncidentLng(e.target.value)}
-                placeholder="72.8697"
-                disabled={savingSettings}
-              />
-              {settingsFieldErrors.incidentLng && <span className="field-error">{settingsFieldErrors.incidentLng}</span>}
-            </div>
+          {/* Title */}
+          <div className="form-group">
+            <label className="form-label" htmlFor="s-title">Title</label>
+            <input
+              id="s-title"
+              type="text"
+              className={`form-input${showSettingsErr('title') ? ' input-error' : ''}`}
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                if (validateScenarioTitle(e.target.value) === null) {
+                  setSettingsFieldErrors((prev) => ({ ...prev, title: '' }));
+                }
+              }}
+              onBlur={() => markSettingsTouched('title', () => validateScenarioTitle(title))}
+              maxLength={255}
+              disabled={savingSettings}
+            />
+            {showSettingsErr('title') && <span className="field-error">{showSettingsErr('title')}</span>}
           </div>
+
+          {/* Disaster type */}
+          <div className="form-group">
+            <label className="form-label" htmlFor="s-dtype">Disaster Type</label>
+            <select
+              id="s-dtype"
+              className="form-input"
+              value={disasterType}
+              onChange={(e) => setDisasterType(e.target.value)}
+              disabled={savingSettings}
+            >
+              {DISASTER_TYPES.map((dt) => (
+                <option key={dt} value={dt}>
+                  {dt.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Incident location picker */}
+          <LocationPicker
+            label="Incident Location (optional)"
+            value={incidentCoords}
+            onChange={setIncidentCoords}
+            contextMarkers={contextMarkers}
+          />
 
           {/* Casualty counts */}
           <div className="section-divider" />
           <p className="synthetic-notice" style={{ marginBottom: '1rem' }}>
             ⚠️ Synthetic / illustrative patient counts — not real health records.
           </p>
+
           <div className="form-grid-4">
             {[
               { id: 's-fracture', label: 'Fracture', value: fracture, set: setFracture, errKey: 'fracture' },
@@ -423,22 +449,35 @@ export const ScenarioDetailPage: React.FC = () => {
                   min="0"
                   max="200"
                   step="1"
-                  className={`form-input${settingsFieldErrors[errKey] ? ' input-error' : ''}`}
+                  className={`form-input${showSettingsErr(errKey) ? ' input-error' : ''}`}
                   value={value}
-                  onChange={(e) => set(e.target.value)}
+                  onChange={(e) => {
+                    set(e.target.value);
+                    if (validateCasualtyCount(e.target.value, label) === null) {
+                      setSettingsFieldErrors((prev) => ({ ...prev, [errKey]: '' }));
+                    }
+                  }}
+                  onBlur={() =>
+                    markSettingsTouched(errKey, () => validateCasualtyCount(value, label))
+                  }
                   disabled={savingSettings}
                 />
-                {settingsFieldErrors[errKey] && <span className="field-error">{settingsFieldErrors[errKey]}</span>}
+                {showSettingsErr(errKey) && (
+                  <span className="field-error">{showSettingsErr(errKey)}</span>
+                )}
               </div>
             ))}
           </div>
+
           <p className="casualty-total">
             Total simulated patients: <strong>{isNaN(totalCasualties) ? '—' : totalCasualties}</strong>
           </p>
 
           <div className="form-actions">
             <button type="submit" className="btn btn-primary" disabled={savingSettings}>
-              {savingSettings ? <><span className="spinner" /><span>Saving…</span></> : <span>Save Settings</span>}
+              {savingSettings
+                ? <><span className="spinner" /><span>Saving…</span></>
+                : <span>Save Settings</span>}
             </button>
           </div>
         </form>
@@ -469,6 +508,15 @@ export const ScenarioDetailPage: React.FC = () => {
               onSave={handleSaveHospital}
               onCancel={() => { setShowHospitalForm(false); setEditingHospital(null); }}
               saving={savingHospital}
+              contextMarkers={[
+                ...incidentContextMarker,
+                ...ambulances.map((a) => ({
+                  kind: 'ambulance' as const,
+                  lat: a.base_lat,
+                  lng: a.base_lng,
+                  label: a.label,
+                })),
+              ]}
             />
           </div>
         )}
@@ -476,9 +524,7 @@ export const ScenarioDetailPage: React.FC = () => {
         {loadingHospitals ? (
           <Spinner label="Loading hospitals…" />
         ) : hospitals.length === 0 ? (
-          <div className="empty-state">
-            <p>No hospitals added to this scenario yet.</p>
-          </div>
+          <div className="empty-state"><p>No hospitals added yet.</p></div>
         ) : (
           <div className="resource-list" role="list" aria-label="Hospitals">
             {hospitals.map((h) => (
@@ -487,7 +533,7 @@ export const ScenarioDetailPage: React.FC = () => {
                   <span className="resource-name">🏥 {h.name}</span>
                   <span className="resource-meta">
                     {h.lat.toFixed(4)}, {h.lng.toFixed(4)}
-                    {' · '}ICU: {h.icu_beds} · Blood: {h.blood_units} · Vent: {h.ventilators} · Gen: {h.general_beds}
+                    {' ·'} ICU: {h.icu_beds} · Blood: {h.blood_units} · Vent: {h.ventilators} · Gen: {h.general_beds}
                   </span>
                 </div>
                 <div className="resource-actions">
@@ -496,17 +542,13 @@ export const ScenarioDetailPage: React.FC = () => {
                     style={{ padding: '0.3rem 0.65rem', fontSize: '0.8rem' }}
                     onClick={() => { setEditingHospital(h); setShowHospitalForm(true); }}
                     aria-label={`Edit ${h.name}`}
-                  >
-                    Edit
-                  </button>
+                  >Edit</button>
                   <button
                     className="btn btn-danger"
                     style={{ padding: '0.3rem 0.65rem', fontSize: '0.8rem' }}
                     onClick={() => handleDeleteHospital(h)}
                     aria-label={`Delete ${h.name}`}
-                  >
-                    Delete
-                  </button>
+                  >Delete</button>
                 </div>
               </div>
             ))}
@@ -538,6 +580,15 @@ export const ScenarioDetailPage: React.FC = () => {
               onSave={handleSaveAmbulance}
               onCancel={() => { setShowAmbulanceForm(false); setEditingAmbulance(null); }}
               saving={savingAmbulance}
+              contextMarkers={[
+                ...incidentContextMarker,
+                ...hospitals.map((h) => ({
+                  kind: 'hospital' as const,
+                  lat: h.lat,
+                  lng: h.lng,
+                  label: h.name,
+                })),
+              ]}
             />
           </div>
         )}
@@ -545,9 +596,7 @@ export const ScenarioDetailPage: React.FC = () => {
         {loadingAmbulances ? (
           <Spinner label="Loading ambulances…" />
         ) : ambulances.length === 0 ? (
-          <div className="empty-state">
-            <p>No ambulances added to this scenario yet.</p>
-          </div>
+          <div className="empty-state"><p>No ambulances added yet.</p></div>
         ) : (
           <div className="resource-list" role="list" aria-label="Ambulances">
             {ambulances.map((a) => (
@@ -556,8 +605,8 @@ export const ScenarioDetailPage: React.FC = () => {
                   <span className="resource-name">🚑 {a.label}</span>
                   <span className="resource-meta">
                     Base: {a.base_lat.toFixed(4)}, {a.base_lng.toFixed(4)}
-                    {' · '}Cap: {a.capacity}
-                    {' · '}<span className={a.available ? 'status-available' : 'status-unavailable'}>
+                    {' ·'} Cap: {a.capacity}
+                    {' ·'} <span className={a.available ? 'status-available' : 'status-unavailable'}>
                       {a.available ? '● Available' : '● Deployed'}
                     </span>
                   </span>
@@ -568,17 +617,13 @@ export const ScenarioDetailPage: React.FC = () => {
                     style={{ padding: '0.3rem 0.65rem', fontSize: '0.8rem' }}
                     onClick={() => { setEditingAmbulance(a); setShowAmbulanceForm(true); }}
                     aria-label={`Edit ambulance ${a.label}`}
-                  >
-                    Edit
-                  </button>
+                  >Edit</button>
                   <button
                     className="btn btn-danger"
                     style={{ padding: '0.3rem 0.65rem', fontSize: '0.8rem' }}
                     onClick={() => handleDeleteAmbulance(a)}
                     aria-label={`Delete ambulance ${a.label}`}
-                  >
-                    Delete
-                  </button>
+                  >Delete</button>
                 </div>
               </div>
             ))}

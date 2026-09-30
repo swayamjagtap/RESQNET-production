@@ -708,3 +708,116 @@ select.form-input {
   padding-right: 2.5rem;
 }
 
+/* ── form-grid-4 overflow fix ────────────────────────────────────────────────
+   Use minmax so columns shrink to fit the card width, preventing overflow
+   at all viewport widths including 1920×1080.                              */
+.form-grid-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* ── LocationPicker ──────────────────────────────────────────────────────── */
+
+.location-picker-wrapper {
+  margin-bottom: 1.25rem;
+}
+
+.location-picker-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+/* The map itself — fixed height, full width of its container */
+.lp-map-container {
+  position: relative;
+  width: 100%;
+  height: 340px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background: #1a2535;
+  margin-bottom: 0.75rem;
+}
+
+.lp-map {
+  width: 100%;
+  height: 100%;
+}
+
+/* Override Leaflet's z-index so it stays inside card stacking context */
+.lp-map-container .leaflet-pane,
+.lp-map-container .leaflet-top,
+.lp-map-container .leaflet-bottom {
+  z-index: 1;
+}
+
+.lp-tile-error {
+  position: absolute;
+  top: 0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 800;
+  background: rgba(239, 68, 68, 0.92);
+  color: #fff;
+  padding: 0.4rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.lp-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1.25rem;
+}
+
+@media (max-width: 480px) {
+  .lp-inputs { grid-template-columns: 1fr; }
+}
+
+.lp-outside-warning {
+  font-size: 0.82rem;
+  color: var(--warning);
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 6px;
+  padding: 0.4rem 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.lp-hint {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin-top: 0.4rem;
+}
+
+/* Legend */
+.lp-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.lp-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.lp-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.3);
+}
+
+/* Make sure the map never causes horizontal page overflow */
+.main-content { overflow-x: hidden; }
+
