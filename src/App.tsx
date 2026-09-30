@@ -6,6 +6,7 @@ import { HomePage } from './pages/HomePage';
 import { AuthPage } from './pages/AuthPage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { ScenarioDetailPage } from './pages/ScenarioDetailPage';
+import { GraphPreviewPage } from './pages/GraphPreviewPage';
 
 export const App: React.FC = () => {
   return (
@@ -18,6 +19,7 @@ export const App: React.FC = () => {
             <Route path="/login" element={<AuthPage />} />
             <Route path="/workspace" element={<WorkspacePage />} />
             <Route path="/workspace/:scenarioId" element={<ScenarioDetailPage />} />
+            <Route path="/graph-preview" element={<GraphPreviewPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           <footer className="footer">
