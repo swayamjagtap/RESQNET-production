@@ -11,7 +11,10 @@ import type {
   SnapResult,
   BlockageLevel,
 } from './types';
-import defaultRoadData from '../data/vileparle-roads.json';
+export async function loadVileParleGraph(): Promise<RoadGraph> {
+  const data = (await import('../data/vileparle-roads.json')).default as unknown as RoadGraphData;
+  return new RoadGraph(data);
+}
 
 /** Haversine formula to compute distance in metres between two lat/lng points */
 export function haversineMetres(
@@ -40,7 +43,7 @@ export class RoadGraph {
   private readonly blockageMap: Map<string, BlockageLevel>;
   private readonly adjacencyMap: Map<string, { to: string; edgeId: string; length: number }[]>;
 
-  constructor(data: RoadGraphData = defaultRoadData as unknown as RoadGraphData) {
+  constructor(data: RoadGraphData) {
     this.metadata = data.metadata;
     this.nodes = data.nodes;
     this.edges = data.edges.map((e) => ({ ...e, blockage: e.blockage ?? 0 }));

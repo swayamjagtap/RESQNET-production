@@ -2,15 +2,19 @@
  * tests/real_graph.test.ts
  * Vitest suite verifying the real Vile Parle OpenStreetMap RoadGraph dataset.
  * Checks connectivity, edge integrity, spatial snapping, pathfinding across town,
- * and blockage isolation.
+ * Western Railway line crossing, and blockage isolation.
  */
 
-import { describe, it, expect } from 'vitest';
-import { RoadGraph } from '../src/sim/graph';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { RoadGraph, loadVileParleGraph, haversineMetres } from '../src/sim/graph';
 import { astar } from '../src/sim/astar';
 
 describe('Vile Parle Real Road Graph Dataset', () => {
-  const graph = new RoadGraph();
+  let graph: RoadGraph;
+
+  beforeAll(async () => {
+    graph = await loadVileParleGraph();
+  });
 
   it('loads graph dataset with valid metadata', () => {
     expect(graph.metadata).toBeDefined();
@@ -65,6 +69,38 @@ describe('Vile Parle Real Road Graph Dataset', () => {
     expect(result!.path.length).toBeGreaterThan(2);
     expect(result!.totalCost).toBeGreaterThan(1000); // > 1 km
     expect(result!.points.length).toBeGreaterThan(2);
+  });
+
+  it('routes across the Western Railway line from West to East Vile Parle', () => {
+    // West of Western Railway line near Vile Parle station (~19.1000 N, 72.8430 E)
+    const westSnap = graph.snapToNearestNode(19.1000, 72.8430);
+    // East of Western Railway line near Vile Parle station (~19.1000 N, 72.8490 E)
+    const eastSnap = graph.snapToNearestNode(19.1000, 72.8490);
+
+    const result = astar(graph, westSnap.nodeId, eastSnap.nodeId);
+
+    expect(result).not.toBeNull();
+    expect(result!.path.length).toBeGreaterThan(2);
+    expect(result!.totalCost).toBeGreaterThan(500);
+
+    const westNode = graph.nodes[westSnap.nodeId];
+    const eastNode = graph.nodes[eastSnap.nodeId];
+    const straightLine = haversineMetres(westNode.lat, westNode.lng, eastNode.lat, eastNode.lng);
+
+    const ratio = result!.totalCost / straightLine;
+    // Detour ratio should be reasonable (between 1.5x and 5.0x for railway crossing via flyover)
+    expect(ratio).toBeGreaterThan(1.2);
+    expect(ratio).toBeLessThan(5.0);
+
+    // Verify at least one edge in route crosses the Western Railway longitude (~72.8458)
+    const crossingEdge = result!.edgeIds.find((edgeId) => {
+      const e = graph.edges.find((x) => x.id === edgeId)!;
+      const nf = graph.nodes[e.from];
+      const nt = graph.nodes[e.to];
+      return (nf.lng < 72.8458 && nt.lng > 72.8458) || (nf.lng > 72.8458 && nt.lng < 72.8458);
+    });
+
+    expect(crossingEdge).toBeDefined();
   });
 
   it('returns null (no route) when all outgoing edges of a node are blocked', () => {

@@ -2,27 +2,66 @@
  * src/pages/GraphPreviewPage.tsx
  * Public, read-only preview component rendering the Vile Parle road network
  * as thin polylines overlaid on an interactive Leaflet map.
+ * Dynamically imports the heavy RoadGraph JSON dataset to optimize bundle size.
  */
 
-import React, { useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
-import { RoadGraph } from '../sim/graph';
+import { RoadGraph, loadVileParleGraph } from '../sim/graph';
 import { VILE_PARLE_CENTER } from '../lib/geo';
 
 export const GraphPreviewPage: React.FC = () => {
-  const graph = useMemo(() => new RoadGraph(), []);
+  const [graph, setGraph] = useState<RoadGraph | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadVileParleGraph()
+      .then((g) => {
+        setGraph(g);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Failed to load road graph');
+        setLoading(false);
+      });
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="main-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px' }}>
+        <div className="spinner" style={{ width: '36px', height: '36px', marginBottom: '1rem' }} />
+        <p style={{ color: 'var(--text-muted)' }}>Loading Vile Parle road graph data…</p>
+      </div>
+    );
+  }
+
+  if (error || !graph) {
+    return (
+      <div className="main-content" style={{ padding: '2rem' }}>
+        <div className="alert alert-error">
+          <span>⚠️</span>
+          <span>Failed to load road graph: {error}</span>
+        </div>
+      </div>
+    );
+  }
+
   const { metadata, edges } = graph;
 
   return (
     <div className="main-content" style={{ maxWidth: '1200px', margin: '0 auto', padding: '1rem' }}>
       <div style={{ marginBottom: '1rem' }}>
         <h1 style={{ fontSize: '1.75rem', marginBottom: '0.4rem' }}>
-          🛣️ Vile Parle Road Graph Preview
+          🛣️ Vile Parle and surroundings: road graph preview
         </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
           Real drivable road graph parsed from OpenStreetMap Overpass API for disaster response simulation.
+        </p>
+        <p style={{ color: 'var(--text-dim)', fontSize: '0.8rem', fontStyle: 'italic', marginBottom: '0.75rem' }}>
+          Edges treated as bidirectional (one-way tags ignored) for this demo.
         </p>
 
         <div
