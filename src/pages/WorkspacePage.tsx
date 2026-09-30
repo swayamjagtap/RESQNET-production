@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { supabase, Scenario } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
+import type { Scenario } from '../lib/types';
+import { validateScenarioTitle } from '../lib/validators';
 import { ConfigNotice } from '../components/ConfigNotice';
 
 export const WorkspacePage: React.FC = () => {
@@ -12,6 +14,7 @@ export const WorkspacePage: React.FC = () => {
   const [fetching, setFetching] = useState<boolean>(true);
   const [creating, setCreating] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [titleError, setTitleError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const fetchScenarios = useCallback(async () => {
@@ -28,7 +31,7 @@ export const WorkspacePage: React.FC = () => {
       if (error) {
         setErrorMessage(`Failed to fetch scenarios: ${error.message}`);
       } else {
-        setScenarios(data || []);
+        setScenarios((data ?? []) as Scenario[]);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'An error occurred while loading scenarios.';
@@ -50,18 +53,15 @@ export const WorkspacePage: React.FC = () => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
+    setTitleError(null);
+
+    const validationError = validateScenarioTitle(titleInput);
+    if (validationError) {
+      setTitleError(validationError);
+      return;
+    }
 
     const trimmedTitle = titleInput.trim();
-
-    if (!trimmedTitle) {
-      setErrorMessage('Scenario title cannot be empty.');
-      return;
-    }
-
-    if (trimmedTitle.length > 255) {
-      setErrorMessage('Scenario title must be 255 characters or fewer.');
-      return;
-    }
 
     if (!supabase || !user) {
       setErrorMessage('User session or Supabase client unavailable.');
@@ -73,17 +73,12 @@ export const WorkspacePage: React.FC = () => {
     try {
       const { error } = await supabase
         .from('scenarios')
-        .insert([
-          {
-            owner_id: user.id,
-            title: trimmedTitle,
-          },
-        ]);
+        .insert([{ owner_id: user.id, title: trimmedTitle }]);
 
       if (error) {
         setErrorMessage(`Failed to create scenario draft: ${error.message}`);
       } else {
-        setSuccessMessage(`Scenario draft "${trimmedTitle}" successfully created.`);
+        setSuccessMessage(`Scenario draft "${trimmedTitle}" created.`);
         setTitleInput('');
         await fetchScenarios();
       }
@@ -98,17 +93,13 @@ export const WorkspacePage: React.FC = () => {
   if (authLoading) {
     return (
       <div className="main-content" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '300px' }}>
-        <div className="spinner" style={{ width: '32px', height: '32px', borderColor: 'var(--primary)', borderTopColor: 'transparent' }}></div>
+        <div className="spinner" style={{ width: '32px', height: '32px' }} />
       </div>
     );
   }
 
   if (!isConfigured) {
-    return (
-      <div className="main-content">
-        <ConfigNotice />
-      </div>
-    );
+    return <div className="main-content"><ConfigNotice /></div>;
   }
 
   if (!user) {
@@ -117,11 +108,9 @@ export const WorkspacePage: React.FC = () => {
         <div className="card" style={{ maxWidth: '500px', margin: '3rem auto', textAlign: 'center' }}>
           <h2 style={{ marginBottom: '1rem' }}>Authentication Required</h2>
           <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
-            You must be signed in to access the RESQNET Workspace and manage scenario drafts.
+            You must be signed in to access the RESQNET Workspace.
           </p>
-          <Link to="/login" className="btn btn-primary">
-            Sign In to Continue →
-          </Link>
+          <Link to="/login" className="btn btn-primary">Sign In to Continue →</Link>
         </div>
       </div>
     );
@@ -130,11 +119,9 @@ export const WorkspacePage: React.FC = () => {
   return (
     <div className="main-content">
       <div style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '1.85rem', marginBottom: '0.5rem' }}>
-          Disaster Scenario Workspace
-        </h1>
+        <h1 style={{ fontSize: '1.85rem', marginBottom: '0.5rem' }}>Disaster Scenario Workspace</h1>
         <p style={{ color: 'var(--text-muted)' }}>
-          Create and manage response scenario drafts backed by RLS-protected database tables.
+          Create and manage disaster response scenario drafts.
         </p>
       </div>
 
@@ -146,44 +133,35 @@ export const WorkspacePage: React.FC = () => {
           </h2>
 
           {errorMessage && (
-            <div className="alert alert-error">
-              <span>⚠️</span>
-              <span>{errorMessage}</span>
-            </div>
+            <div className="alert alert-error"><span>⚠️</span><span>{errorMessage}</span></div>
           )}
-
           {successMessage && (
-            <div className="alert alert-success">
-              <span>✅</span>
-              <span>{successMessage}</span>
-            </div>
+            <div className="alert alert-success"><span>✅</span><span>{successMessage}</span></div>
           )}
 
-          <form onSubmit={handleCreateScenario}>
+          <form onSubmit={handleCreateScenario} noValidate>
             <div className="form-group">
               <label className="form-label" htmlFor="scenario-title">Scenario Title</label>
               <input
                 id="scenario-title"
                 type="text"
-                className="form-input"
+                className={`form-input${titleError ? ' input-error' : ''}`}
                 value={titleInput}
-                onChange={(e) => setTitleInput(e.target.value)}
+                onChange={(e) => { setTitleInput(e.target.value); setTitleError(null); }}
                 placeholder="e.g., Vile Parle East Flood Relief & Evacuation Route A"
                 maxLength={255}
-                required
                 disabled={creating}
+                aria-describedby={titleError ? 'scenario-title-err' : undefined}
               />
+              {titleError && <span id="scenario-title-err" className="field-error">{titleError}</span>}
               <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textAlign: 'right' }}>
-                {titleInput.trim().length} / 255 characters
+                {titleInput.trim().length} / 255
               </span>
             </div>
 
             <button type="submit" className="btn btn-primary" disabled={creating || !titleInput.trim()}>
               {creating ? (
-                <>
-                  <span className="spinner"></span>
-                  <span>Saving to Supabase...</span>
-                </>
+                <><span className="spinner" /><span>Saving to Supabase…</span></>
               ) : (
                 <span>Save Draft Scenario</span>
               )}
@@ -195,40 +173,49 @@ export const WorkspacePage: React.FC = () => {
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h2 style={{ fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span>📂</span> Saved Draft Scenarios
+              <span>📂</span> Saved Scenarios
             </h2>
-            <button 
-              onClick={fetchScenarios} 
-              className="btn btn-secondary" 
+            <button
+              onClick={fetchScenarios}
+              className="btn btn-secondary"
               style={{ padding: '0.3rem 0.75rem', fontSize: '0.8rem' }}
               disabled={fetching}
             >
-              {fetching ? 'Refreshing...' : '🔄 Refresh'}
+              {fetching ? 'Refreshing…' : '🔄 Refresh'}
             </button>
           </div>
 
           {fetching ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
-              <div className="spinner" style={{ width: '24px', height: '24px', borderColor: 'var(--primary)', borderTopColor: 'transparent' }}></div>
+              <div className="spinner" style={{ width: '24px', height: '24px' }} />
             </div>
           ) : scenarios.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '2.5rem 1rem', background: 'rgba(15, 23, 42, 0.3)', borderRadius: '8px', border: '1px dashed var(--border-color)' }}>
               <p style={{ color: 'var(--text-muted)', marginBottom: '0.5rem' }}>No scenario drafts found.</p>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}>
-                Enter a title above and save your first draft scenario.
-              </p>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}>Enter a title above and save your first draft.</p>
             </div>
           ) : (
             <div className="scenarios-list">
               {scenarios.map((scenario) => (
                 <div key={scenario.id} className="scenario-item">
                   <div className="scenario-info">
-                    <span className="scenario-title">{scenario.title}</span>
+                    <Link
+                      to={`/workspace/${scenario.id}`}
+                      className="scenario-title"
+                      style={{ textDecoration: 'none', color: 'var(--primary)' }}
+                    >
+                      {scenario.title}
+                    </Link>
                     <span className="scenario-meta">
-                      ID: {scenario.id} • Created: {new Date(scenario.created_at).toLocaleString()}
+                      {scenario.disaster_type
+                        ? scenario.disaster_type.replace(/_/g, ' ')
+                        : 'draft'}{' '}
+                      • {new Date(scenario.created_at).toLocaleString()}
                     </span>
                   </div>
-                  <span className="badge badge-live" style={{ fontSize: '0.7rem' }}>Draft</span>
+                  <Link to={`/workspace/${scenario.id}`} className="btn btn-secondary" style={{ padding: '0.3rem 0.75rem', fontSize: '0.8rem' }}>
+                    Open →
+                  </Link>
                 </div>
               ))}
             </div>

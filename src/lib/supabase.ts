@@ -1,17 +1,12 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
+export type { Scenario, Hospital, Ambulance } from './types';
+
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-export interface Scenario {
-  id: string;
-  owner_id: string;
-  title: string;
-  created_at: string;
-}
-
 /**
-  Checks if Supabase credentials are populated with valid non-placeholder values.
+ * Checks if Supabase credentials are populated with valid non-placeholder values.
  */
 export const isSupabaseConfigured = (): boolean => {
   if (!supabaseUrl || !supabasePublishableKey) return false;

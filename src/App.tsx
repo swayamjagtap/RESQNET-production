@@ -5,6 +5,7 @@ import { Navbar } from './components/Navbar';
 import { HomePage } from './pages/HomePage';
 import { AuthPage } from './pages/AuthPage';
 import { WorkspacePage } from './pages/WorkspacePage';
+import { ScenarioDetailPage } from './pages/ScenarioDetailPage';
 
 export const App: React.FC = () => {
   return (
@@ -16,6 +17,7 @@ export const App: React.FC = () => {
             <Route path="/" element={<HomePage />} />
             <Route path="/login" element={<AuthPage />} />
             <Route path="/workspace" element={<WorkspacePage />} />
+            <Route path="/workspace/:scenarioId" element={<ScenarioDetailPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           <footer className="footer">
