@@ -113,10 +113,13 @@ export function astar(
     let current: string | null = null;
     let lowestF = Infinity;
 
+    // Deterministic tie-breaking rule: when f-scores are equal, the node
+    // with the lexicographically smallest ID wins. This guarantees identical
+    // paths for identical inputs regardless of Set insertion order.
     for (const nodeId of openSet) {
       const g = gScore.get(nodeId)!;
       const f = g + heuristic(nodeId);
-      if (f < lowestF) {
+      if (f < lowestF || (f === lowestF && current !== null && nodeId < current)) {
         lowestF = f;
         current = nodeId;
       }
