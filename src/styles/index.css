@@ -109,6 +109,7 @@ body {
   letter-spacing: 0.05em;
   background: linear-gradient(90deg, #f8fafc, #94a3b8);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -152,6 +153,7 @@ h1, h2, h3, h4 {
 .gradient-text {
   background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #f43f5e 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -401,28 +403,45 @@ h1, h2, h3, h4 {
   background: rgba(15, 23, 42, 0.4);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, background-color 0.2s;
+  gap: 1rem;
 }
 
 .scenario-item:hover {
-  border-color: rgba(56, 189, 248, 0.3);
+  border-color: rgba(56, 189, 248, 0.35);
+  background: rgba(15, 23, 42, 0.6);
 }
 
 .scenario-info {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  flex: 1;
+  min-width: 0;
 }
 
 .scenario-title {
   font-weight: 600;
   color: var(--text-main);
+  word-break: break-word;
+}
+
+.scenario-title:hover {
+  color: var(--primary-hover);
+  text-decoration: underline !important;
 }
 
 .scenario-meta {
   font-size: 0.75rem;
   color: var(--text-muted);
   font-family: var(--font-mono);
+}
+
+.scenario-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 /* Setup Banner */

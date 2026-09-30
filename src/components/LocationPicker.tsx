@@ -21,8 +21,9 @@ import {
 } from 'react-leaflet';
 import L from 'leaflet';
 
-// CSS must be imported at module level for Vite to bundle it correctly.
-import 'leaflet/dist/leaflet.css';
+import { VILE_PARLE_CENTER, roundCoord } from '../lib/geo';
+
+// ── Custom coloured icons ─────────────────────────────────────────────────────
 
 // ── Fix Leaflet default icon broken by Vite's asset pipeline ──────────────────
 // Leaflet tries to resolve marker-icon.png via a relative URL from its own
@@ -86,22 +87,11 @@ interface Props {
   readOnly?: boolean;
 }
 
-// ── Approximate map view limits (NOT administrative boundaries) ───────────────
-// Chosen to keep both Vile Parle East (~19.098°N 72.850°E)
-// and Vile Parle West (~19.105°N 72.835°E) fully visible at zoom 14.
-const VP_SW: [number, number] = [19.085, 72.825];
-const VP_NE: [number, number] = [19.125, 72.875];
-const VP_CENTER: [number, number] = [
-  (VP_SW[0] + VP_NE[0]) / 2,
-  (VP_SW[1] + VP_NE[1]) / 2,
-];
-
-function isInsideVP(lat: number, lng: number): boolean {
-  return lat >= VP_SW[0] && lat <= VP_NE[0] && lng >= VP_SW[1] && lng <= VP_NE[1];
-}
+// Default center is Vile Parle: lat 19.105, lng 72.85
+const DEFAULT_CENTER: [number, number] = [VILE_PARLE_CENTER.lat, VILE_PARLE_CENTER.lng];
 
 function round6(n: number): number {
-  return Math.round(n * 1_000_000) / 1_000_000;
+  return roundCoord(n);
 }
 
 // ── Sub-component: click handler inside the map context ───────────────────────
@@ -163,7 +153,6 @@ export const LocationPicker: React.FC<Props> = ({
     }
   }, [value]);
 
-  const isOutside = value ? !isInsideVP(value.lat, value.lng) : false;
 
   const applyInputs = useCallback(
     (latRaw: string, lngRaw: string) => {
@@ -291,7 +280,7 @@ export const LocationPicker: React.FC<Props> = ({
           </div>
         )}
         <MapContainer
-          center={markerPosition ?? VP_CENTER}
+          center={markerPosition ?? DEFAULT_CENTER}
           zoom={14}
           className="lp-map"
           scrollWheelZoom
@@ -330,12 +319,6 @@ export const LocationPicker: React.FC<Props> = ({
         </MapContainer>
       </div>
 
-      {/* Soft out-of-area warning */}
-      {isOutside && (
-        <p className="lp-outside-warning" role="status">
-          ⚠️ Outside the Vile Parle area this demo focuses on.
-        </p>
-      )}
 
       {/* Coordinate inputs */}
       <div className="lp-inputs">

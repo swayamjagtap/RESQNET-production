@@ -17,6 +17,8 @@ export const WorkspacePage: React.FC = () => {
   const [titleError, setTitleError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   const fetchScenarios = useCallback(async () => {
     if (!supabase || !user) return;
     setFetching(true);
@@ -90,6 +92,42 @@ export const WorkspacePage: React.FC = () => {
     }
   };
 
+  const handleDeleteScenario = async (id: string, title: string) => {
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete draft scenario "${title}"?\n\nThis action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    if (!supabase || !user) {
+      setErrorMessage('User session or Supabase client unavailable.');
+      return;
+    }
+
+    setDeletingId(id);
+
+    try {
+      const { error } = await supabase
+        .from('scenarios')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        setErrorMessage(`Failed to delete scenario: ${error.message}`);
+      } else {
+        setSuccessMessage(`Scenario "${title}" deleted.`);
+        await fetchScenarios();
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'An error occurred while deleting scenario.';
+      setErrorMessage(msg);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   if (authLoading) {
     return (
       <div className="main-content" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '300px' }}>
@@ -125,19 +163,23 @@ export const WorkspacePage: React.FC = () => {
         </p>
       </div>
 
+      {errorMessage && (
+        <div className="alert alert-error" style={{ marginBottom: '1.5rem' }}>
+          <span>⚠️</span><span>{errorMessage}</span>
+        </div>
+      )}
+      {successMessage && (
+        <div className="alert alert-success" style={{ marginBottom: '1.5rem' }}>
+          <span>✅</span><span>{successMessage}</span>
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem' }}>
         {/* Create Scenario Form */}
         <div className="card">
           <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span>➕</span> Create Draft Scenario
           </h2>
-
-          {errorMessage && (
-            <div className="alert alert-error"><span>⚠️</span><span>{errorMessage}</span></div>
-          )}
-          {successMessage && (
-            <div className="alert alert-success"><span>✅</span><span>{successMessage}</span></div>
-          )}
 
           <form onSubmit={handleCreateScenario} noValidate>
             <div className="form-group">
@@ -213,9 +255,26 @@ export const WorkspacePage: React.FC = () => {
                       • {new Date(scenario.created_at).toLocaleString()}
                     </span>
                   </div>
-                  <Link to={`/workspace/${scenario.id}`} className="btn btn-secondary" style={{ padding: '0.3rem 0.75rem', fontSize: '0.8rem' }}>
-                    Open →
-                  </Link>
+                  <div className="scenario-actions">
+                    <Link
+                      to={`/workspace/${scenario.id}`}
+                      className="btn btn-secondary"
+                      style={{ padding: '0.3rem 0.75rem', fontSize: '0.8rem' }}
+                      aria-label={`Open scenario ${scenario.title}`}
+                    >
+                      Open →
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteScenario(scenario.id, scenario.title)}
+                      className="btn btn-danger"
+                      style={{ padding: '0.3rem 0.75rem', fontSize: '0.8rem' }}
+                      disabled={deletingId === scenario.id}
+                      aria-label={`Delete scenario ${scenario.title}`}
+                    >
+                      {deletingId === scenario.id ? 'Deleting…' : 'Delete'}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
