@@ -363,14 +363,19 @@ export const ScenarioDetailPage: React.FC = () => {
         <span>{scenario?.title ?? 'Scenario'}</span>
       </nav>
 
-      <header className="page-header">
-        <h1>{scenario?.title}</h1>
-        <p className="text-muted" style={{ fontSize: '0.85rem' }}>
-          ID: <code>{scenarioId}</code> ·{' '}
-          {scenario?.updated_at
-            ? `Last updated ${new Date(scenario.updated_at).toLocaleString()}`
-            : `Created ${new Date(scenario?.created_at ?? '').toLocaleString()}`}
-        </p>
+      <header className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h1>{scenario?.title}</h1>
+          <p className="text-muted" style={{ fontSize: '0.85rem' }}>
+            ID: <code>{scenarioId}</code> ·{' '}
+            {scenario?.updated_at
+              ? `Last updated ${new Date(scenario.updated_at).toLocaleString()}`
+              : `Created ${new Date(scenario?.created_at ?? '').toLocaleString()}`}
+          </p>
+        </div>
+        <Link to={`/workspace/${scenarioId}/simulate`} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', alignSelf: 'center' }}>
+          <span>▶️</span> Run Simulation
+        </Link>
       </header>
 
       {/* ── Scenario Settings ── */}
