@@ -10,7 +10,7 @@ import { SimEngine, AMBULANCE_SPEED_MPS } from '../sim/engine';
 import type { SimState } from '../sim/types';
 import { accumulatePlayback } from '../lib/playback';
 import { computeCollocationOffset, getMapPoints } from '../lib/map-utils';
-import { buildDisplayNameMaps, formatEventText, isKeyEvent } from '../lib/event-display';
+import { buildDisplayNameMaps, describeEvent, isKeyEvent } from '../lib/event-display';
 import { RoadLayer } from '../components/RoadLayer';
 import { ConfigNotice } from '../components/ConfigNotice';
 import { createLedger, failureReport, type Ledger, type LedgerEntry, type VerifyResult } from '../lib/audit';
@@ -23,20 +23,22 @@ const PLAYBACK_RATE_NORMAL = 20;
 
 function getAmbulanceIcon(label: string, count: number, capacity: number, bearing: number, dx = 0, dy = 0) {
   const short = label.length > 8 ? label.slice(0, 8) + '…' : label;
-  const svg = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(${bearing}deg); background: white; border-radius: 50%; padding: 2px; box-shadow: 0 1px 3px rgba(0,0,0,0.4);">
+  const svg = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="background: white; border-radius: 50%; padding: 2px; box-shadow: 0 1px 3px rgba(0,0,0,0.4);">
     <rect x="2" y="7" width="20" height="10" rx="2" fill="white" />
     <path d="M12 9v6M9 12h6" stroke="red" stroke-width="3" />
     <circle cx="6" cy="17" r="2" fill="black" />
     <circle cx="18" cy="17" r="2" fill="black" />
   </svg>`;
   
-  const html = `<div style="transform:translate(${dx}px,${dy}px); display: flex; align-items: center; gap: 4px; pointer-events: none;">
-    ${svg}
-    <div title="${label} · ${count}/${capacity}" style="background:#3b82f6;color:white;padding:2px 6px;border-radius:12px;font-size:0.75rem;font-weight:600;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.4);border:1.5px solid white;cursor:default;">
+  const html = `<div class="amb-wrapper" style="transform:translate(${dx}px,${dy}px); display: flex; align-items: center; gap: 4px; pointer-events: none; width: max-content;">
+    <div class="amb-svg-container" style="transform: rotate(${bearing}deg); display: flex; justify-content: center; align-items: center; transform-origin: center;">
+      ${svg}
+    </div>
+    <div class="amb-text-container" style="background:#3b82f6;color:white;padding:2px 6px;border-radius:12px;font-size:0.75rem;font-weight:600;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.4);border:1.5px solid white;cursor:default;">
       ${short}&nbsp;·&nbsp;${count}/${capacity}
     </div>
   </div>`;
-  return L.divIcon({ html, className: '', iconSize: [100, 28], iconAnchor: [14, 14] });
+  return L.divIcon({ html, className: '', iconSize: [160, 28], iconAnchor: [14, 14] });
 }
 
 function getHospitalIcon() {
@@ -56,6 +58,102 @@ function MapRefit({ bounds }: { bounds: L.LatLngBoundsExpression | null }) {
   useEffect(() => {
     if (bounds) map.fitBounds(bounds, { padding: [30, 30] });
   }, [bounds, map]);
+
+  // Fix map grey area: invalidate size on container resize
+  useEffect(() => {
+    const observer = new ResizeObserver(() => {
+      map.invalidateSize();
+    });
+    observer.observe(map.getContainer());
+    return () => observer.disconnect();
+  }, [map]);
+
+  return null;
+}
+
+/* ─────────────────── Imperative Ambulance Layer ───────────────────────────── */
+
+function AmbulanceLayer({ 
+  simInput, stateRef, roadGraph, playingRef, accRef, speedRef 
+}: { 
+  simInput: any; stateRef: React.MutableRefObject<SimState | null>; roadGraph: any; 
+  playingRef: React.MutableRefObject<boolean>; accRef: React.MutableRefObject<number>; 
+  speedRef: React.MutableRefObject<number>; 
+}) {
+  const map = useMap();
+  const markersRef = useRef<Record<string, L.Marker>>({});
+  const reqRef = useRef<number>();
+
+  useEffect(() => {
+    // Create markers ONCE
+    if (simInput && simInput.ambulances) {
+      simInput.ambulances.forEach((aInput: any) => {
+        const icon = getAmbulanceIcon(aInput.label, 0, aInput.capacity, 0, 0, 0);
+        const marker = L.marker([0, 0], { icon, zIndexOffset: 1000 }).addTo(map);
+        marker.setOpacity(0); // hide until first update
+        markersRef.current[aInput.id] = marker;
+      });
+    }
+    return () => {
+      Object.values(markersRef.current).forEach(m => m.remove());
+      markersRef.current = {};
+    };
+  }, [map, simInput]);
+
+  useEffect(() => {
+    function renderLoop() {
+      const st = stateRef.current;
+      if (st && roadGraph && simInput) {
+        const isResolved = st.status === 'resolved';
+        const msPerTick = 1000 / (PLAYBACK_RATE_NORMAL * speedRef.current);
+        const interpolationFraction = (playingRef.current && !isResolved) ? Math.min(1, accRef.current / msPerTick) : 0;
+        
+        const mapPoints = getMapPoints(simInput, st, roadGraph, interpolationFraction);
+        
+        mapPoints.ambulances.forEach(item => {
+           const marker = markersRef.current[item.ambulance.id];
+           if (marker) {
+              marker.setOpacity(1);
+              marker.setLatLng([item.point.lat, item.point.lng]);
+              
+              const el = marker.getElement();
+              if (el) {
+                 const svgContainer = el.querySelector('.amb-svg-container') as HTMLElement;
+                 if (svgContainer) svgContainer.style.transform = `rotate(${item.bearing}deg)`;
+                 
+                 const textContainer = el.querySelector('.amb-text-container') as HTMLElement;
+                 if (textContainer) {
+                    const onboard = item.ambulance.cargo.reduce((sum: number, g: any) => sum + g.count, 0);
+                    const label = item.ambulance.label;
+                    const short = label.length > 8 ? label.slice(0, 8) + '…' : label;
+                    textContainer.innerHTML = `${short}&nbsp;·&nbsp;${onboard}/${item.ambulance.capacity}`;
+                 }
+
+                 const wrapper = el.querySelector('.amb-wrapper') as HTMLElement;
+                 if (wrapper) {
+                    const collocated = mapPoints.ambulances.filter(o =>
+                      o.ambulance.currentNode === item.ambulance.currentNode
+                    ).sort((x, y) => x.id.localeCompare(y.id));
+                    const idx = collocated.findIndex(x => x.id === item.ambulance.id);
+                    let edgeDirX = 1, edgeDirY = 0;
+                    if (item.ambulance.currentPath.length >= 2 && roadGraph?.nodes) {
+                      const n1 = roadGraph.nodes[item.ambulance.currentPath[0]];
+                      const n2 = roadGraph.nodes[item.ambulance.currentPath[1]];
+                      if (n1 && n2) { edgeDirX = n2.lng - n1.lng; edgeDirY = n2.lat - n1.lat; }
+                    }
+                    const offset = computeCollocationOffset(idx, edgeDirX, edgeDirY);
+                    wrapper.style.transform = `translate(${offset.dx}px,${offset.dy}px)`;
+                 }
+              }
+           }
+        });
+      }
+      reqRef.current = requestAnimationFrame(renderLoop);
+    }
+    reqRef.current = requestAnimationFrame(renderLoop);
+    return () => { if (reqRef.current) cancelAnimationFrame(reqRef.current); };
+  }, [map, simInput, roadGraph, stateRef, accRef, playingRef, speedRef]);
+
   return null;
 }
 
@@ -467,24 +565,11 @@ const SimulationPageContent: React.FC = () => {
               );
             })}
 
-            {/* Ambulances */}
-            {mapPoints.ambulances.map(item => {
-              const a = item.ambulance;
-              const collocated = mapPoints.ambulances.filter(o =>
-                o.ambulance.currentNode === a.currentNode
-              ).sort((x, y) => x.id.localeCompare(y.id));
-              const idx = collocated.findIndex(x => x.id === a.id);
-              let edgeDirX = 1, edgeDirY = 0;
-              if (a.currentPath.length >= 2 && roadGraph?.nodes) {
-                const n1 = roadGraph.nodes[a.currentPath[0]];
-                const n2 = roadGraph.nodes[a.currentPath[1]];
-                if (n1 && n2) { edgeDirX = n2.lng - n1.lng; edgeDirY = n2.lat - n1.lat; }
-              }
-              const offset = computeCollocationOffset(idx, edgeDirX, edgeDirY);
-              const onboard = a.cargo.reduce((sum, g) => sum + g.count, 0);
-              const icon = getAmbulanceIcon(a.label, onboard, a.capacity, item.bearing, offset.dx, offset.dy);
-              return <Marker key={a.id} position={[item.point.lat, item.point.lng]} icon={icon} />;
-            })}
+            {/* Ambulances rendered imperatively via component */}
+            <AmbulanceLayer 
+              simInput={simInput} stateRef={stateRef} roadGraph={roadGraph} 
+              playingRef={playingRef} accRef={accRef} speedRef={speedRef} 
+            />
           </MapContainer>
         </div>
 
@@ -551,13 +636,28 @@ const SimulationPageContent: React.FC = () => {
                   preStartRoadChangeSeen.add(edgeId);
                 }
                 return (
-                  <div key={e.hash} style={{ marginBottom: '0.3rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.2rem', lineHeight: 1.3 }}>
-                    <div style={{ fontSize: '0.65rem', color: 'var(--text-dim)', marginBottom: '0.1rem' }}>
-                      #{e.data.id} · {e.hash.slice(0, 8)}
+                  <div key={e.hash} style={{ marginBottom: '0.4rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.3rem', lineHeight: 1.3 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.15rem' }}>
+                      <div>
+                        <span style={{ color: 'var(--text-dim)', marginRight: '0.4rem', fontWeight: 600 }}>T+{e.data.simTime}</span>
+                        <span style={{ 
+                          fontWeight: 600, 
+                          color: 'var(--primary)', 
+                          fontSize: '0.65rem',
+                          background: 'rgba(59, 130, 246, 0.1)',
+                          padding: '1px 4px',
+                          borderRadius: '4px'
+                        }}>
+                          {e.data.kind.toUpperCase()}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-dim)' }}>
+                        #{e.data.id} · {e.hash.slice(0, 8)}
+                      </div>
                     </div>
-                    <span style={{ color: 'var(--text-dim)', marginRight: '0.4rem' }}>[{e.data.simTime}]</span>
-                    <span style={{ fontWeight: 600, color: 'var(--primary)', marginRight: '0.3rem' }}>{e.data.kind.toUpperCase()}</span>
-                    {formatEventText(e.data.text, displayMaps)}
+                    <div style={{ paddingLeft: '0.2rem' }}>
+                      {describeEvent(evData, displayMaps)}
+                    </div>
                   </div>
                 );
               })}
