@@ -580,12 +580,49 @@ const SimulationPageContent: React.FC = () => {
       )}
 
       {/* ──── Main layout ──── */}
-      <div style={{ display: 'flex', gap: '0.75rem', flex: 1, minHeight: 0 }}>
+      <style>{`
+        .sim-layout-grid {
+          --sim-h: clamp(460px, 72vh, 700px);
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 380px;
+          align-items: start;
+          gap: 20px;
+        }
+        .sim-map-col {
+          height: var(--sim-h);
+          width: 100%;
+        }
+        .sim-dash-col {
+          height: var(--sim-h);
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          overflow: hidden;
+        }
+        .sim-dash-log {
+          flex: 1;
+          min-height: 0;
+          overflow-y: auto;
+        }
+        @media (max-width: 980px) {
+          .sim-layout-grid {
+            grid-template-columns: 1fr;
+          }
+          .sim-map-col {
+            height: clamp(320px, 55vh, 480px);
+          }
+          .sim-dash-col {
+            height: auto;
+          }
+          .sim-dash-log {
+            max-height: 360px;
+          }
+        }
+      `}</style>
+      <div className="sim-layout-grid">
 
-        {/* ──── Map & Legend Column ──── */}
-        <div style={{ flex: 2, display: 'flex', flexDirection: 'column', minWidth: 0, gap: '8px' }}>
-          {/* ──── Map ──── */}
-          <div className="card" style={{ flex: 1, padding: 0, overflow: 'hidden', position: 'relative', height: 'clamp(420px, 62vh, 640px)', width: '100%' }}>
+        {/* ──── Map Column ──── */}
+        <div className="sim-map-col card" style={{ padding: 0, overflow: 'hidden', position: 'relative' }}>
             <MapContainer
               bounds={mapPoints.bounds || undefined}
               center={!mapPoints.bounds && mapPoints.incident ? [mapPoints.incident.lat, mapPoints.incident.lng] : undefined}
@@ -625,37 +662,26 @@ const SimulationPageContent: React.FC = () => {
                 playingRef={playingRef} accRef={accRef} speedRef={speedRef} 
               />
             </MapContainer>
-          </div>
-
-          {/* Map Legend (Below Map) */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', padding: '0 4px', fontSize: '0.75rem', color: 'var(--text-main)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '14px', background: 'white', border: '2px solid #16a34a', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a', fontSize: '9px', fontWeight: 'bold' }}>H</div> Scenario hospital</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '14px', background: '#ef4444', border: '1px solid white', borderRadius: '50%' }}></div> Incident</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '8px', background: 'white', border: '1px solid black', borderRadius: '2px' }}></div> Ambulance</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '16px', height: '3px', background: '#dc2626', borderTop: '1px dashed white' }}></div> Blocked road</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '16px', height: '3px', background: '#d97706' }}></div> Partial road</div>
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginLeft: 'auto' }}>Red crosses on the basemap are OpenStreetMap places, not scenario hospitals.</div>
-          </div>
         </div>
 
         {/* ──── Dashboard ──── */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem', minWidth: '280px', maxWidth: '400px' }}>
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '0.75rem', height: '100%' }}>
-            {/* Fleet Status */}
+        <div className="sim-dash-col card" style={{ padding: '0.75rem' }}>
+          {/* Fleet Status */}
             <h3 style={{ marginBottom: '0.4rem', fontSize: '0.95rem', flexShrink: 0 }}>Fleet Status</h3>
             <div style={{
               display: 'grid', 
               gridTemplateColumns: liveView.ambulances.length > 8 ? '1fr 1fr' : '1fr',
               gap: '0.35rem', 
               marginBottom: '0.5rem', 
-              flexShrink: 0
+              flexShrink: 0,
+              overflowWrap: 'anywhere'
             }}>
               {liveView.ambulances.map(a => {
                 const { text, icon, color } = getAmbulanceStatus(a, liveView.simSeconds > 0, displayMaps);
                 return (
                   <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'var(--bg-elevated)', padding: '0.35rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem', color }}>
                     <span style={{ fontSize: '1rem' }}>{icon}</span>
-                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><strong>{a.label}</strong> {text}</span>
+                    <span style={{ overflowWrap: 'anywhere' }}><strong>{a.label}</strong> {text}</span>
                   </div>
                 );
               })}
@@ -705,7 +731,8 @@ const SimulationPageContent: React.FC = () => {
             <div
               ref={logContainerRef}
               onScroll={handleLogScroll}
-              style={{ flex: 1, overflowY: 'auto', background: 'var(--bg-elevated)', borderRadius: '4px', padding: '0.4rem', fontSize: '0.78rem', position: 'relative', minHeight: '260px' }}
+              className="sim-dash-log"
+              style={{ background: 'var(--bg-elevated)', borderRadius: '4px', padding: '0.4rem', fontSize: '0.78rem', position: 'relative' }}
             >
               {displayEntries.map(e => {
                 const evData = e.data.details || e.data;
@@ -752,34 +779,43 @@ const SimulationPageContent: React.FC = () => {
               )}
             </div>
             
-            <details style={{ fontSize: '0.65rem', color: 'var(--text-dim)', marginTop: '0.3rem' }}>
+            <details style={{ fontSize: '0.65rem', color: 'var(--text-dim)', marginTop: '0.3rem', flexShrink: 0 }}>
               <summary style={{ cursor: 'pointer', outline: 'none' }}>Tamper-evident, not tamper-proof. What does this mean?</summary>
               <div style={{ marginTop: '0.3rem', paddingLeft: '0.8rem', borderLeft: '2px solid var(--border-color)' }}>
                 Each entry's hash includes the previous entry's hash, so editing an old entry breaks every later link and Verify log reports the first broken entry. The chain is stored in this browser with no outside witness: someone who can rewrite the whole chain can recompute every hash. It is not immutable and not a blockchain.
               </div>
             </details>
-          </div>
-
-          {/* Completion summary */}
-          {liveView.status === 'resolved' && (
-            <div className="card" style={{ background: 'rgba(34, 197, 94, 0.1)', borderColor: 'var(--success)', padding: '0.75rem' }}>
-              <h3 style={{ color: 'var(--success)', marginBottom: '0.4rem', fontSize: '0.95rem' }}>Simulation Complete</h3>
-              <p style={{ fontSize: '0.85rem', marginBottom: '0.2rem' }}>
-                Delivered: {liveView.deliveredCount}. Of these, {liveView.underResourcedCount} arrived at a hospital short of required resources.
-              </p>
-              <p style={{ fontSize: '0.85rem', marginBottom: '0.2rem' }}>
-                Elapsed: {time(liveView.simSeconds)}
-              </p>
-              <p style={{ fontSize: '0.85rem', marginBottom: '0.2rem' }}>
-                Completed trips: {liveView.ambulances.reduce((acc, a) => acc + a.trips, 0)}
-              </p>
-              <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
-                Synthetic scenario. Speed assumed {AMBULANCE_SPEED_MPS} m/s. Not medical advice.
-              </p>
-            </div>
-          )}
         </div>
       </div>
+
+      {/* Map Legend (Below Grid) */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', padding: '0 4px', fontSize: '0.75rem', color: 'var(--text-main)', marginTop: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '14px', background: 'white', border: '2px solid #16a34a', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a', fontSize: '9px', fontWeight: 'bold' }}>H</div> Scenario hospital</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '14px', background: '#ef4444', border: '1px solid white', borderRadius: '50%' }}></div> Incident</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '8px', background: 'white', border: '1px solid black', borderRadius: '2px' }}></div> Ambulance</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '16px', height: '3px', background: '#dc2626', borderTop: '1px dashed white' }}></div> Blocked road</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '16px', height: '3px', background: '#d97706' }}></div> Partial road</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginLeft: 'auto' }}>Red crosses on the basemap are OpenStreetMap places, not scenario hospitals.</div>
+      </div>
+
+      {/* Completion summary */}
+      {liveView.status === 'resolved' && (
+        <div className="card" style={{ background: 'rgba(34, 197, 94, 0.1)', borderColor: 'var(--success)', padding: '0.75rem', marginTop: '0.75rem' }}>
+          <h3 style={{ color: 'var(--success)', marginBottom: '0.4rem', fontSize: '0.95rem' }}>Simulation Complete</h3>
+          <p style={{ fontSize: '0.85rem', marginBottom: '0.2rem' }}>
+            Delivered: {liveView.deliveredCount}. Of these, {liveView.underResourcedCount} arrived at a hospital short of required resources.
+          </p>
+          <p style={{ fontSize: '0.85rem', marginBottom: '0.2rem' }}>
+            Elapsed: {time(liveView.simSeconds)}
+          </p>
+          <p style={{ fontSize: '0.85rem', marginBottom: '0.2rem' }}>
+            Completed trips: {liveView.ambulances.reduce((acc, a) => acc + a.trips, 0)}
+          </p>
+          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
+            Synthetic scenario. Speed assumed {AMBULANCE_SPEED_MPS} m/s. Not medical advice.
+          </p>
+        </div>
+      )}
     </div>
   );
 };
