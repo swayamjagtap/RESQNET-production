@@ -8,6 +8,7 @@ export interface LiveAmbulance {
   capacity: number;
   destinationName: string;
   destinationId: string | null;
+  hospitalId: string | null;
   currentNode: string;
   stuckReason: string | null;
   trips: number;
@@ -50,6 +51,7 @@ export function extractLiveView(state: SimState | null): LiveView {
       capacity: a.capacity,
       destinationName,
       destinationId: a.destination,
+      hospitalId: a.hospitalReservation?.hospitalId || null,
       currentNode: a.currentNode,
       stuckReason: a.stuckReason,
       trips: a.trips

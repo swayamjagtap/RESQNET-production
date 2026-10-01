@@ -30,6 +30,7 @@ export function buildDisplayNameMaps(
     }
     for (const h of simInput.hospitals) {
       hospitalNames.set(h.id, h.name);
+      hospitalNames.set(h.graphNodeId, h.name);
     }
   }
   if (state) {
@@ -38,6 +39,7 @@ export function buildDisplayNameMaps(
     }
     for (const h of state.hospitals) {
       hospitalNames.set(h.id, h.name);
+      hospitalNames.set(h.node, h.name);
     }
   }
 

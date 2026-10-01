@@ -12,7 +12,10 @@ export function getAmbulanceStatus(a: LiveAmbulance, hasStarted: boolean, maps: 
   let icon = '🚑';
   let color = 'inherit';
 
-  const locName = maps.hospitalNames.get(a.currentNode) || maps.nodeNames.get(a.currentNode) || 'a junction';
+  let locName = maps.hospitalNames.get(a.currentNode) || maps.nodeNames.get(a.currentNode) || 'a junction';
+  if (locName.match(/\bn\d{6,}\b/)) {
+    locName = 'a junction';
+  }
 
   if (a.status === 'idle') {
     text = hasStarted ? `: idle at ${locName}` : `: ready at ${locName}`;
@@ -22,8 +25,11 @@ export function getAmbulanceStatus(a: LiveAmbulance, hasStarted: boolean, maps: 
     text = `→ Incident`;
     icon = '🚨';
   } else if (a.status === 'to_hospital') {
-    const destNodeName = maps.hospitalNames.get(a.destinationId || '') || a.destinationName;
-    const destName = destNodeName !== 'none' ? destNodeName : (maps.nodeNames.get(a.destinationId || '') || 'unknown road');
+    const destNodeName = maps.hospitalNames.get(a.hospitalId || '') || maps.hospitalNames.get(a.destinationId || '') || a.destinationName;
+    let destName = destNodeName !== 'none' ? destNodeName : (maps.nodeNames.get(a.destinationId || '') || 'a junction');
+    if (destName.match(/\bn\d{6,}\b/)) {
+      destName = 'a junction';
+    }
     const patientsStr = a.onboard === 1 ? '1 patient' : `${a.onboard} patients`;
     text = `→ ${destName} (carrying ${patientsStr})`;
     icon = '🏥';

@@ -269,8 +269,6 @@ const SimulationPageContent: React.FC = () => {
   const [playing, setPlaying] = useState<boolean>(false);
   const [autoScrollLog, setAutoScrollLog] = useState(true);
   const [showSnapshots, setShowSnapshots] = useState(false);
-  const [showAllFleet, setShowAllFleet] = useState(false);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [refitCounter, setRefitCounter] = useState(0);
   const [isDemoMode, setIsDemoMode] = useState(false);
 
@@ -584,126 +582,107 @@ const SimulationPageContent: React.FC = () => {
       {/* ──── Main layout ──── */}
       <div style={{ display: 'flex', gap: '0.75rem', flex: 1, minHeight: 0 }}>
 
-        {/* ──── Map ──── */}
-        <div className="card" style={{ flex: 2, padding: 0, overflow: 'hidden', position: 'relative' }}>
-          <MapContainer
-            bounds={mapPoints.bounds || undefined}
-            center={!mapPoints.bounds && mapPoints.incident ? [mapPoints.incident.lat, mapPoints.incident.lng] : undefined}
-            zoom={!mapPoints.bounds ? 14 : undefined}
-            style={{ width: '100%', height: '100%', background: '#e8e8e8' }}
-            zoomAnimation={true}
-          >
-            <TileLayer
-              url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            />
+        {/* ──── Map & Legend Column ──── */}
+        <div style={{ flex: 2, display: 'flex', flexDirection: 'column', minWidth: 0, gap: '8px' }}>
+          {/* ──── Map ──── */}
+          <div className="card" style={{ flex: 1, padding: 0, overflow: 'hidden', position: 'relative', height: 'clamp(420px, 62vh, 640px)', width: '100%' }}>
+            <MapContainer
+              bounds={mapPoints.bounds || undefined}
+              center={!mapPoints.bounds && mapPoints.incident ? [mapPoints.incident.lat, mapPoints.incident.lng] : undefined}
+              zoom={!mapPoints.bounds ? 14 : undefined}
+              style={{ width: '100%', height: '100%', background: '#e8e8e8' }}
+              zoomAnimation={true}
+            >
+              <TileLayer
+                url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              />
 
-            {roadGraph && engine && <RoadLayer graph={roadGraph} engine={engine} />}
-            <MapRefit bounds={refitCounter > 0 ? mapPoints.bounds : null} key={refitCounter} />
+              {roadGraph && engine && <RoadLayer graph={roadGraph} engine={engine} />}
+              <MapRefit bounds={refitCounter > 0 ? mapPoints.bounds : null} key={refitCounter} />
 
-            {/* Active routes */}
-            {mapPoints.activeRoutes.map(route => (
-              <Polyline key={route.id} positions={route.positions}
-                pathOptions={{ color: '#3b82f6', weight: 3, opacity: 0.8 }} />
-            ))}
+              {/* Active routes */}
+              {mapPoints.activeRoutes.map(route => (
+                <Polyline key={route.id} positions={route.positions}
+                  pathOptions={{ color: '#3b82f6', weight: 3, opacity: 0.8 }} />
+              ))}
 
-            {/* Incident */}
-            {mapPoints.incident && (
-              <Marker position={[mapPoints.incident.lat, mapPoints.incident.lng]} icon={getIncidentIcon()} />
-            )}
+              {/* Incident */}
+              {mapPoints.incident && (
+                <Marker position={[mapPoints.incident.lat, mapPoints.incident.lng]} icon={getIncidentIcon()} />
+              )}
 
-            {/* Hospitals */}
-            {mapPoints.hospitals.map(h => {
-              return (
-                <Marker key={h.id} position={[h.point.lat, h.point.lng]} icon={getHospitalIcon()} />
-              );
-            })}
+              {/* Hospitals */}
+              {mapPoints.hospitals.map(h => {
+                return (
+                  <Marker key={h.id} position={[h.point.lat, h.point.lng]} icon={getHospitalIcon()} />
+                );
+              })}
 
-            {/* Ambulances rendered imperatively via component */}
-            <AmbulanceLayer 
-              simInput={simInput} stateRef={stateRef} roadGraph={roadGraph} 
-              playingRef={playingRef} accRef={accRef} speedRef={speedRef} 
-            />
-          </MapContainer>
-        </div>
+              {/* Ambulances rendered imperatively via component */}
+              <AmbulanceLayer 
+                simInput={simInput} stateRef={stateRef} roadGraph={roadGraph} 
+                playingRef={playingRef} accRef={accRef} speedRef={speedRef} 
+              />
+            </MapContainer>
+          </div>
 
-        {/* Map Legend (Below Map) */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', marginTop: '8px', padding: '0 4px', fontSize: '0.75rem', color: 'var(--text-main)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '14px', background: 'white', border: '2px solid #16a34a', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a', fontSize: '9px', fontWeight: 'bold' }}>H</div> Scenario hospital</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '14px', background: '#ef4444', border: '1px solid white', borderRadius: '50%' }}></div> Incident</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '8px', background: 'white', border: '1px solid black', borderRadius: '2px' }}></div> Ambulance</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '16px', height: '3px', background: '#dc2626', borderTop: '1px dashed white' }}></div> Blocked road</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '16px', height: '3px', background: '#d97706' }}></div> Partial road</div>
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginLeft: 'auto' }}>Red crosses on the basemap are OpenStreetMap places, not scenario hospitals.</div>
+          {/* Map Legend (Below Map) */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', padding: '0 4px', fontSize: '0.75rem', color: 'var(--text-main)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '14px', background: 'white', border: '2px solid #16a34a', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a', fontSize: '9px', fontWeight: 'bold' }}>H</div> Scenario hospital</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '14px', background: '#ef4444', border: '1px solid white', borderRadius: '50%' }}></div> Incident</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '8px', background: 'white', border: '1px solid black', borderRadius: '2px' }}></div> Ambulance</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '16px', height: '3px', background: '#dc2626', borderTop: '1px dashed white' }}></div> Blocked road</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '16px', height: '3px', background: '#d97706' }}></div> Partial road</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginLeft: 'auto' }}>Red crosses on the basemap are OpenStreetMap places, not scenario hospitals.</div>
+          </div>
         </div>
 
         {/* ──── Dashboard ──── */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem', minWidth: '280px', maxWidth: '400px' }}>
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '0.75rem', maxHeight: '520px' }}>
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '0.75rem', height: '100%' }}>
             {/* Fleet Status */}
-            <h3 style={{ marginBottom: '0.4rem', fontSize: '0.95rem' }}>Fleet Status</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', overflowY: 'auto', marginBottom: '0.5rem', maxHeight: '160px' }}>
-              {liveView.ambulances.slice(0, showAllFleet ? undefined : 4).map(a => {
+            <h3 style={{ marginBottom: '0.4rem', fontSize: '0.95rem', flexShrink: 0 }}>Fleet Status</h3>
+            <div style={{
+              display: 'grid', 
+              gridTemplateColumns: liveView.ambulances.length > 8 ? '1fr 1fr' : '1fr',
+              gap: '0.35rem', 
+              marginBottom: '0.5rem', 
+              flexShrink: 0
+            }}>
+              {liveView.ambulances.map(a => {
                 const { text, icon, color } = getAmbulanceStatus(a, liveView.simSeconds > 0, displayMaps);
                 return (
                   <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'var(--bg-elevated)', padding: '0.35rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem', color }}>
                     <span style={{ fontSize: '1rem' }}>{icon}</span>
-                    <span><strong>{a.label}</strong> {text}</span>
+                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><strong>{a.label}</strong> {text}</span>
                   </div>
                 );
               })}
-              {liveView.ambulances.length > 4 && (
-                <button 
-                  onClick={() => setShowAllFleet(!showAllFleet)} 
-                  style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', textAlign: 'left', padding: '0.2rem 0', fontSize: '0.75rem', fontWeight: 600 }}
-                >
-                  {showAllFleet ? 'Show fewer' : `Show all (${liveView.ambulances.length})`}
-                </button>
-              )}
             </div>
 
             {/* Counters + Log header */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.25rem', marginBottom: '0.3rem' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.25rem', marginBottom: '0.3rem', flexShrink: 0 }}>
               <h3 style={{ fontSize: '0.95rem', margin: 0 }}>Decision Log</h3>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                 {time(liveView.simSeconds)} · {liveView.deliveredCount} delivered · {liveView.waiting} waiting
               </span>
             </div>
             
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.3rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.3rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <span>{ledgerEntries.length} entries · head {headHash.slice(0, 8)}…</span>
-              <div style={{ display: 'flex', gap: '0.3rem', position: 'relative' }}>
-                <button onClick={handleVerify} className="btn btn-secondary" style={{ padding: '2px 6px', fontSize: '0.7rem' }}>Verify</button>
-                <button 
-                  onClick={() => setShowMoreMenu(!showMoreMenu)} 
-                  onBlur={() => setTimeout(() => setShowMoreMenu(false), 150)}
-                  className="btn btn-secondary" 
-                  style={{ padding: '2px 6px', fontSize: '0.7rem' }}
-                  aria-haspopup="true"
-                  aria-expanded={showMoreMenu}
-                >
-                  More ▾
-                </button>
-                
-                {showMoreMenu && (
-                  <div style={{ 
-                    position: 'absolute', right: 0, top: '100%', marginTop: '4px', 
-                    background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', 
-                    borderRadius: '4px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', 
-                    zIndex: 100, minWidth: '120px', display: 'flex', flexDirection: 'column'
-                  }}>
-                    <button onClick={handleCopyHeadHash} style={{ padding: '6px 12px', fontSize: '0.75rem', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)', borderBottom: '1px solid var(--border-color)' }}>Copy head hash</button>
-                    <button onClick={handleExportLog} style={{ padding: '6px 12px', fontSize: '0.75rem', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)', borderBottom: '1px solid var(--border-color)' }}>Export log (JSON)</button>
-                    <label style={{ padding: '6px 12px', fontSize: '0.75rem', cursor: 'pointer', color: 'var(--text-main)' }}>
-                      Verify exported log
-                      <input type="file" accept=".json" onChange={handleVerifyExport} style={{ display: 'none' }} />
-                    </label>
-                  </div>
-                )}
-              </div>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '0.3rem', flexShrink: 0 }}>
+              <button onClick={handleVerify} className="btn btn-secondary" style={{ padding: '2px 6px', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>Verify</button>
+              <button onClick={handleCopyHeadHash} className="btn btn-secondary" style={{ padding: '2px 6px', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>Copy hash</button>
+              <button onClick={handleExportLog} className="btn btn-secondary" style={{ padding: '2px 6px', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>Export JSON</button>
+              <label className="btn btn-secondary" style={{ padding: '2px 6px', fontSize: '0.7rem', cursor: 'pointer', margin: 0, whiteSpace: 'nowrap' }}>
+                Verify file
+                <input type="file" accept=".json" onChange={handleVerifyExport} style={{ display: 'none' }} />
+              </label>
             </div>
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem', flexWrap: 'wrap', gap: '4px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem', flexWrap: 'wrap', gap: '4px', flexShrink: 0 }}>
               <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
                 <input type="checkbox" checked={showSnapshots} onChange={e => setShowSnapshots(e.target.checked)} style={{ width: '12px', height: '12px' }} />
                 Show minute snapshots
@@ -726,7 +705,7 @@ const SimulationPageContent: React.FC = () => {
             <div
               ref={logContainerRef}
               onScroll={handleLogScroll}
-              style={{ flex: 1, overflowY: 'auto', background: 'var(--bg-elevated)', borderRadius: '4px', padding: '0.4rem', fontSize: '0.78rem', position: 'relative', minHeight: '100px' }}
+              style={{ flex: 1, overflowY: 'auto', background: 'var(--bg-elevated)', borderRadius: '4px', padding: '0.4rem', fontSize: '0.78rem', position: 'relative', minHeight: '260px' }}
             >
               {displayEntries.map(e => {
                 const evData = e.data.details || e.data;

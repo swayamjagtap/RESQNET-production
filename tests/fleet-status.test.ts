@@ -20,6 +20,7 @@ describe('fleet-status helper', () => {
     capacity: 3,
     destinationName: 'none',
     destinationId: null,
+    hospitalId: null,
     currentNode: 'n1',
     stuckReason: null,
     trips: 0,
