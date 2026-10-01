@@ -5,7 +5,7 @@ import * as path from 'path';
 
 describe('SimulationPage Style Variables', () => {
   it('source contains the layout variable --sim-h', () => {
-    const pagePath = path.join(__dirname, '../src/pages/SimulationPage.tsx');
+    const pagePath = path.join(__dirname, '../src/pages/SimulationView.tsx');
     const sourceCode = fs.readFileSync(pagePath, 'utf8');
     
     // Assert that the clamp height is used for the map container

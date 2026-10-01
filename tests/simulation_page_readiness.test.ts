@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import { getSimulationRenderMode } from '../src/pages/SimulationPage';
+import { getSimulationRenderMode } from '../src/pages/SimulationView';
 import type { Scenario, Hospital, Ambulance } from '../src/lib/types';
 import { RoadGraph } from '../src/sim/graph';
 import { buildSimInput, createRun } from '../src/sim/adapter';
@@ -13,11 +13,11 @@ describe('SimulationPage Readiness & Null Safety Logic', () => {
   const validScenario: Scenario = {
     id: 'test-scenario',
     owner_id: 'test-owner',
-    title: 'Valid Scenario',
+    title: 'Test',
     disaster_type: 'building_collapse',
-    incident_lat: 19.0985,
+    incident_lat: 19.1,
     incident_lng: 72.85,
-    fracture: 2,
+    fracture: 1,
     blood_loss: 0,
     unconscious: 0,
     limb_loss: 0,
@@ -28,43 +28,40 @@ describe('SimulationPage Readiness & Null Safety Logic', () => {
   const validHospital: Hospital = {
     id: 'H1',
     scenario_id: 'test-scenario',
-    name: 'Hospital 1',
-    lat: 19.115,
-    lng: 72.84,
-    icu_beds: 5,
-    blood_units: 5,
-    ventilators: 5,
-    general_beds: 5,
+    name: 'H1',
+    lat: 19.105,
+    lng: 72.855,
+    icu_beds: 10,
+    blood_units: 10,
+    ventilators: 10,
+    general_beds: 10,
     created_at: '2026-01-01',
   };
 
   const validAmbulance: Ambulance = {
     id: 'A1',
     scenario_id: 'test-scenario',
-    label: 'Amb 1',
-    base_lat: 19.115,
-    base_lng: 72.84,
+    label: 'A1',
+    base_lat: 19.105,
+    base_lng: 72.855,
     capacity: 2,
     available: true,
     created_at: '2026-01-01',
   };
 
-  it('(a) no data yet (loading state)', () => {
+  it('(a) no data yet (initializing state)', () => {
     expect(() => {
       const result = getSimulationRenderMode({
-        authLoading: false,
-        loading: true,
-        isConfigured: true,
         error: null,
-        scenario: null,
-        hospitals: [],
-        ambulances: [],
+        scenario: validScenario,
+        hospitals: [validHospital],
+        ambulances: [validAmbulance],
         roadGraph: null,
         simInput: null,
         state: null,
         engine: null,
       });
-      expect(result.mode).toBe('loading');
+      expect(result.mode).toBe('initializing');
       expect(result.missingItems).toEqual([]);
     }).not.toThrow();
   });
@@ -77,9 +74,6 @@ describe('SimulationPage Readiness & Null Safety Logic', () => {
         incident_lng: null,
       };
       const result = getSimulationRenderMode({
-        authLoading: false,
-        loading: false,
-        isConfigured: true,
         error: null,
         scenario: scenarioNoIncident,
         hospitals: [validHospital],
@@ -97,9 +91,6 @@ describe('SimulationPage Readiness & Null Safety Logic', () => {
   it('(c) no hospitals', () => {
     expect(() => {
       const result = getSimulationRenderMode({
-        authLoading: false,
-        loading: false,
-        isConfigured: true,
         error: null,
         scenario: validScenario,
         hospitals: [],
@@ -121,9 +112,6 @@ describe('SimulationPage Readiness & Null Safety Logic', () => {
       const engine = new SimEngine(state, mockGraph);
 
       const result = getSimulationRenderMode({
-        authLoading: false,
-        loading: false,
-        isConfigured: true,
         error: null,
         scenario: validScenario,
         hospitals: [validHospital],
@@ -155,9 +143,6 @@ describe('SimulationPage Readiness & Null Safety Logic', () => {
     };
 
     const result = getSimulationRenderMode({
-      authLoading: false,
-      loading: false,
-      isConfigured: true,
       error: null,
       scenario: scenario27f3,
       hospitals: [validHospital],

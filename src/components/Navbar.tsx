@@ -26,6 +26,9 @@ export const Navbar: React.FC = () => {
           <Link to="/" className="btn btn-secondary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.875rem' }}>
             Home
           </Link>
+          <Link to="/demo" className="btn btn-primary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.875rem' }}>
+            Demo
+          </Link>
 
           {user ? (
             <>

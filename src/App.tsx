@@ -8,6 +8,7 @@ import { WorkspacePage } from './pages/WorkspacePage';
 import { ScenarioDetailPage } from './pages/ScenarioDetailPage';
 import { SimulationPage } from './pages/SimulationPage';
 import { GraphPreviewPage } from './pages/GraphPreviewPage';
+import { DemoPage } from './pages/DemoPage';
 
 export const App: React.FC = () => {
   return (
@@ -22,6 +23,7 @@ export const App: React.FC = () => {
             <Route path="/workspace/:scenarioId" element={<ScenarioDetailPage />} />
             <Route path="/workspace/:scenarioId/simulate" element={<SimulationPage />} />
             <Route path="/graph-preview" element={<GraphPreviewPage />} />
+            <Route path="/demo" element={<DemoPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           <footer className="footer">

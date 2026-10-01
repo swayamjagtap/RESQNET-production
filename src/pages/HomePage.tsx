@@ -25,14 +25,17 @@ export const HomePage: React.FC = () => {
           RESQNET provides a foundation for high-efficiency emergency response simulation, custom disaster scenarios (Vile Parle East & West), resource allocation, and decision auditing.
         </p>
 
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <Link to="/demo" className="btn btn-primary" style={{ padding: '0.8rem 1.75rem', fontSize: '1rem', background: '#2563eb', border: '1px solid #1d4ed8' }}>
+            Try the live simulation →
+          </Link>
           {user ? (
-            <Link to="/workspace" className="btn btn-primary" style={{ padding: '0.8rem 1.75rem', fontSize: '1rem' }}>
-              Go to Workspace →
+            <Link to="/workspace" className="btn btn-secondary" style={{ padding: '0.8rem 1.75rem', fontSize: '1rem' }}>
+              Go to Workspace
             </Link>
           ) : (
-            <Link to="/login" className="btn btn-primary" style={{ padding: '0.8rem 1.75rem', fontSize: '1rem' }}>
-              Sign In to Access Workspace →
+            <Link to="/login" className="btn btn-secondary" style={{ padding: '0.8rem 1.75rem', fontSize: '1rem' }}>
+              Sign In to Access Workspace
             </Link>
           )}
         </div>
