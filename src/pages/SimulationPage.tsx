@@ -9,7 +9,7 @@ import { buildSimInput, createRun } from '../sim/adapter';
 import { SimEngine, AMBULANCE_SPEED_MPS } from '../sim/engine';
 import type { SimState } from '../sim/types';
 import { accumulatePlayback } from '../lib/playback';
-import { computeCollocationOffset } from '../lib/map-utils';
+import { computeCollocationOffset, getMapPoints } from '../lib/map-utils';
 import { RoadLayer } from '../components/RoadLayer';
 import { ConfigNotice } from '../components/ConfigNotice';
 
@@ -294,13 +294,7 @@ const SimulationPageContent: React.FC = () => {
     );
   }
 
-  // Active routes mapping
-  const activeRoutes = state?.ambulances
-    .filter(a => (a.status === 'to_incident' || a.status === 'to_hospital') && a.currentPath.length > 0)
-    .map(a => {
-      const positions = a.currentPath.map(id => roadGraph.nodes[id]);
-      return { id: a.id, positions };
-    });
+  const mapPoints = getMapPoints(simInput, state, roadGraph);
 
   return (
     <div className="main-content" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', height: 'calc(100vh - 100px)' }}>
@@ -323,6 +317,12 @@ const SimulationPageContent: React.FC = () => {
         </div>
       </header>
 
+      {mapPoints.warnings.length > 0 && (
+        <div className="alert alert-warning">
+          ⚠️ Map Warning: {mapPoints.warnings.join(' ')}
+        </div>
+      )}
+
       {simInput?.incidentSnap?.warning && (
         <div className="alert alert-warning">
           Incident snapped {simInput.incidentSnap.distanceMetres}m to nearest road (warning: &gt;300m).
@@ -339,7 +339,9 @@ const SimulationPageContent: React.FC = () => {
         {/* Map Area */}
         <div className="card" style={{ flex: 2, padding: 0, overflow: 'hidden', position: 'relative' }}>
           <MapContainer 
-            bounds={[[simInput.incidentSnap.nodeLat, simInput.incidentSnap.nodeLng], ...hospitals.map(h => [h.lat, h.lng] as [number, number])]}
+            bounds={mapPoints.bounds || undefined}
+            center={!mapPoints.bounds && mapPoints.incident ? [mapPoints.incident.lat, mapPoints.incident.lng] : undefined}
+            zoom={!mapPoints.bounds ? 14 : undefined}
             style={{ width: '100%', height: '100%', background: '#0f172a' }}
           >
             <TileLayer
@@ -350,10 +352,10 @@ const SimulationPageContent: React.FC = () => {
             {roadGraph && engine && <RoadLayer graph={roadGraph} engine={engine} />}
 
             {/* Active routes */}
-            {activeRoutes?.map(route => (
+            {mapPoints.activeRoutes.map(route => (
               <Polyline 
                 key={route.id} 
-                positions={route.positions.map(n => [n.lat, n.lng])} 
+                positions={route.positions} 
                 color="var(--primary)" 
                 weight={3} 
                 opacity={0.8} 
@@ -361,34 +363,35 @@ const SimulationPageContent: React.FC = () => {
             ))}
 
             {/* Incident */}
-            <Marker position={[scenario!.incident_lat!, scenario!.incident_lng!]} 
-              icon={L.divIcon({ html: '🔥', className: '', iconSize: [24,24], iconAnchor: [12,12] })} 
-            />
+            {mapPoints.incident && (
+              <Marker position={[mapPoints.incident.lat, mapPoints.incident.lng]} 
+                icon={L.divIcon({ html: '🔥', className: '', iconSize: [24,24], iconAnchor: [12,12] })} 
+              />
+            )}
 
             {/* Hospitals */}
-            {simInput?.hospitals.map((h: any) => {
+            {mapPoints.hospitals.map(h => {
               const stock = state?.hospitals.find(sh => sh.id === h.id)?.stock || { icu: 0, blood: 0, vent: 0, beds: 0 };
               return (
-                <Marker key={h.id} position={[h.lat, h.lng]} 
+                <Marker key={h.id} position={[h.point.lat, h.point.lng]} 
                   icon={getHospitalIcon(h.name, stock.icu, stock.blood, stock.vent, stock.beds)} 
                 />
               );
             })}
 
             {/* Ambulances */}
-            {state?.ambulances.map(a => {
-              const p = roadGraph.nodes[a.currentNode];
-              if (!p) return null;
+            {mapPoints.ambulances.map(item => {
+              const a = item.ambulance;
               
               // Count collocated ambulances for offset
-              const collocated = state.ambulances.filter(o => 
-                (o.currentNode === a.currentNode)
+              const collocated = mapPoints.ambulances.filter(o => 
+                o.ambulance.currentNode === a.currentNode
               ).sort((x, y) => x.id.localeCompare(y.id));
               
               const idx = collocated.findIndex(x => x.id === a.id);
               let edgeDirX = 1, edgeDirY = 0; // default
               
-              if (a.currentPath.length >= 2) {
+              if (a.currentPath.length >= 2 && roadGraph?.nodes) {
                 const n1 = roadGraph.nodes[a.currentPath[0]];
                 const n2 = roadGraph.nodes[a.currentPath[1]];
                 if (n1 && n2) {
@@ -403,7 +406,7 @@ const SimulationPageContent: React.FC = () => {
               const icon = getAmbulanceIcon(a.id, onboard, a.capacity, offset.dx, offset.dy);
               
               return (
-                <Marker key={a.id} position={[p.lat, p.lng]} icon={icon} />
+                <Marker key={a.id} position={[item.point.lat, item.point.lng]} icon={icon} />
               );
             })}
           </MapContainer>
