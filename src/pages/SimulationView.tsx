@@ -229,6 +229,9 @@ export const SimulationView: React.FC<{
   const [showSnapshots, setShowSnapshots] = useState(false);
   const [refitCounter, setRefitCounter] = useState(0);
   const [isDemoMode, setIsDemoMode] = useState(false);
+  
+  const [comparing, setComparing] = useState(false);
+  const [compareResult, setCompareResult] = useState<any>(null);
 
   const reqRef = useRef<number>();
   const lastTimeRef = useRef<number>();
@@ -436,6 +439,26 @@ export const SimulationView: React.FC<{
     e.target.value = ''; // Reset
   };
 
+  const handleCompare = async () => {
+    if (!roadGraph) return;
+    setComparing(true);
+    setCompareResult(null);
+    
+    // Yield to let React render spinner
+    await new Promise(r => setTimeout(r, 50));
+    
+    try {
+      const { runPolicyComparison } = await import('../lib/compare');
+      const res = runPolicyComparison(scenario, hospitals, ambulances, roadGraph);
+      setCompareResult(res);
+    } catch (e) {
+      console.error(e);
+      alert('Comparison failed: ' + String(e));
+    } finally {
+      setComparing(false);
+    }
+  };
+
   // ──── Readiness gate ────
   const renderInfo = getSimulationRenderMode({
     error, scenario,
@@ -501,6 +524,9 @@ export const SimulationView: React.FC<{
             {playLabel}
           </button>
           <button className="btn btn-secondary" onClick={handleReset}>Reset</button>
+          <button className="btn btn-secondary" onClick={handleCompare} disabled={comparing}>
+            {comparing ? 'Comparing...' : 'Compare policies'}
+          </button>
           <button className="btn btn-secondary" onClick={() => setRefitCounter(c => c + 1)} title="Re-centre map">⊕</button>
         </div>
       </header>
@@ -519,6 +545,56 @@ export const SimulationView: React.FC<{
       {liveView.ambulances.some(a => a.status === 'stuck') && (
         <div className="alert alert-error" style={{ margin: 0, padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}>
           ⚠️ Ambulance stuck: {state?.ambulances.find(a => a.status === 'stuck')?.stuckReason}
+        </div>
+      )}
+      
+      {/* ──── Compare Results ──── */}
+      {compareResult && (
+        <div className="card" style={{ padding: '0.75rem', marginBottom: '0.5rem', background: 'var(--bg-elevated)' }}>
+          <h3 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>Policy Comparison</h3>
+          <table style={{ width: '100%', fontSize: '0.8rem', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                <th style={{ padding: '0.3rem' }}>Metric</th>
+                <th style={{ padding: '0.3rem' }}>Resource-aware</th>
+                <th style={{ padding: '0.3rem' }}>Baseline</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style={{ padding: '0.3rem' }}>Delivered</td>
+                <td style={{ padding: '0.3rem' }}>{compareResult.resource_aware.delivered}</td>
+                <td style={{ padding: '0.3rem' }}>{compareResult.baseline.delivered}</td>
+              </tr>
+              <tr style={{ background: 'rgba(0,0,0,0.02)' }}>
+                <td style={{ padding: '0.3rem' }}>Under-resourced arrivals</td>
+                <td style={{ padding: '0.3rem', color: compareResult.resource_aware.underResourcedCount === 0 ? 'var(--success)' : 'var(--error)' }}>
+                  {compareResult.resource_aware.underResourcedCount}
+                </td>
+                <td style={{ padding: '0.3rem', color: compareResult.baseline.underResourcedCount === 0 ? 'var(--success)' : 'var(--error)' }}>
+                  {compareResult.baseline.underResourcedCount}
+                </td>
+              </tr>
+              <tr>
+                <td style={{ padding: '0.3rem' }}>Simulated elapsed</td>
+                <td style={{ padding: '0.3rem' }}>{time(compareResult.resource_aware.simulatedSeconds)}</td>
+                <td style={{ padding: '0.3rem' }}>{time(compareResult.baseline.simulatedSeconds)}</td>
+              </tr>
+              <tr style={{ background: 'rgba(0,0,0,0.02)' }}>
+                <td style={{ padding: '0.3rem' }}>Completed trips</td>
+                <td style={{ padding: '0.3rem' }}>{compareResult.resource_aware.completedTrips}</td>
+                <td style={{ padding: '0.3rem' }}>{compareResult.baseline.completedTrips}</td>
+              </tr>
+              <tr>
+                <td style={{ padding: '0.3rem' }}>Mean high-priority delivery</td>
+                <td style={{ padding: '0.3rem' }}>{compareResult.resource_aware.meanHighPriorityDeliverySeconds !== null ? time(Math.round(compareResult.resource_aware.meanHighPriorityDeliverySeconds)) : 'N/A'}</td>
+                <td style={{ padding: '0.3rem' }}>{compareResult.baseline.meanHighPriorityDeliverySeconds !== null ? time(Math.round(compareResult.baseline.meanHighPriorityDeliverySeconds)) : 'N/A'}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.5rem', marginBottom: 0 }}>
+            One synthetic scenario on the Vile Parle graph. Not a general or clinical claim.
+          </p>
         </div>
       )}
 

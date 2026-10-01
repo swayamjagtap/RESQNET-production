@@ -127,6 +127,7 @@ export interface SimVictimGroupInput {
 export interface SimInput {
   scenarioId: string;
   scenarioTitle: string;
+  policy?: 'resource_aware' | 'baseline_nearest_fcfs';
   incidentNodeId: string;
   incidentSnap: SnapInfo;
   hospitals: readonly SimHospitalInput[];
@@ -227,6 +228,7 @@ export interface SimEvent {
 
 export interface SimState {
   status: 'idle' | 'running' | 'resolved';
+  policy: 'resource_aware' | 'baseline_nearest_fcfs';
   tick: number;
   simSeconds: number;
   events: SimEvent[];

@@ -61,6 +61,18 @@ export function selectHospital(
 
   const considered = state.hospitals.map((h) => {
     const route = astar(graph, a.currentNode, h.node);
+    
+    // baseline never reads hospital stock when choosing
+    if (state.policy === 'baseline_nearest_fcfs') {
+      return {
+        hospital: h,
+        route: route as AStarResult | null,
+        available: emptyResources(), // Not used for choice
+        coverage: 0,
+        sufficient: false,
+      };
+    }
+    
     const available = availableResources(h);
     const coverage = Math.max(0, Math.min(...needs.map((k) => available[k])));
     return {
@@ -95,41 +107,49 @@ export function selectHospital(
     return false;
   }
 
-  const sufficient = candidates.filter((c) => c.sufficient);
-
-  // Fully resourced: shortest reachable route. Fallback: most complete resource
-  // bundles (min across both resources), then shortest route, then hospital ID.
-  // Matches core.js lines ~155–157.
-  const pool = sufficient.length ? sufficient : candidates;
-  const ranked = [...pool].sort((x, y) => {
-    if (sufficient.length) {
-      // Among sufficient: sort by cost, then by hospital ID.
-      return (
-        x.route!.totalCost - y.route!.totalCost ||
-        x.hospital.id.localeCompare(y.hospital.id)
-      );
-    }
-    // Fallback: highest coverage, then lowest cost, then hospital ID.
-    return (
-      y.coverage - x.coverage ||
+  let chosen = candidates[0];
+  if (state.policy === 'baseline_nearest_fcfs') {
+    const ranked = [...candidates].sort((x, y) => 
       x.route!.totalCost - y.route!.totalCost ||
       x.hospital.id.localeCompare(y.hospital.id)
     );
-  });
+    chosen = ranked[0];
+  } else {
+    const sufficient = candidates.filter((c) => c.sufficient);
+    const pool = sufficient.length ? sufficient : candidates;
+    const ranked = [...pool].sort((x, y) => {
+      if (sufficient.length) {
+        return (
+          x.route!.totalCost - y.route!.totalCost ||
+          x.hospital.id.localeCompare(y.hospital.id)
+        );
+      }
+      return (
+        y.coverage - x.coverage ||
+        x.route!.totalCost - y.route!.totalCost ||
+        x.hospital.id.localeCompare(y.hospital.id)
+      );
+    });
+    chosen = ranked[0];
+  }
 
-  const chosen = ranked[0];
   const h = chosen.hospital;
   const amounts = emptyResources();
+  
+  // Even in baseline, we must compute actual available and reserve it now,
+  // because delivery still consumes whatever stock exists.
+  const actualAvailable = availableResources(h);
+  const actuallySufficient = Math.max(0, Math.min(...needs.map(k => actualAvailable[k]))) >= count;
 
   for (const k of needs) {
-    amounts[k] = Math.max(0, Math.min(count, chosen.available[k]));
+    amounts[k] = Math.max(0, Math.min(count, actualAvailable[k]));
     h.reserved[k] += amounts[k];
   }
 
   a.hospitalReservation = {
     hospitalId: h.id,
     amounts,
-    underResourced: !chosen.sufficient,
+    underResourced: !actuallySufficient,
   };
   a.destination = h.node;
   a.currentPath = chosen.route!.path;
@@ -140,24 +160,26 @@ export function selectHospital(
   simEvent(
     state,
     'hospital_select',
-    `${a.id} selected ${h.id}${chosen.sufficient ? '' : ' (under-resourced)'}`,
+    `${a.id} selected ${h.id}${actuallySufficient ? '' : ' (under-resourced)'}`,
     {
       ambulanceId: a.id,
       hospitalId: h.id,
-      underResourced: !chosen.sufficient,
-      reason: chosen.sufficient
-        ? 'Shortest reachable route with sufficient available resources'
-        : 'Highest available complete-resource coverage; route cost breaks ties',
+      underResourced: !actuallySufficient,
+      reason: state.policy === 'baseline_nearest_fcfs'
+        ? 'baseline: nearest hospital'
+        : (actuallySufficient
+            ? 'Shortest reachable route with sufficient available resources'
+            : 'Highest available complete-resource coverage; route cost breaks ties'),
       needs: [...needs],
       count,
       route: [...chosen.route!.path],
       reserved: { ...amounts },
       candidates: considered.map((c) => ({
         hospitalId: c.hospital.id,
-        available: { ...c.available },
-        coverage: c.coverage,
+        available: state.policy === 'baseline_nearest_fcfs' ? { ...actualAvailable } : { ...c.available },
+        coverage: state.policy === 'baseline_nearest_fcfs' ? Math.max(0, Math.min(...needs.map(k => actualAvailable[k]))) : c.coverage,
         cost: c.route ? c.route.totalCost : null,
-        sufficient: c.sufficient,
+        sufficient: state.policy === 'baseline_nearest_fcfs' ? actuallySufficient : c.sufficient,
         reachable: !!c.route,
       })),
     },

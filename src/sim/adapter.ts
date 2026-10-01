@@ -93,6 +93,7 @@ export function buildSimInput(
   hospitals: Hospital[],
   ambulances: Ambulance[],
   graph: RoadGraph,
+  policy: 'resource_aware' | 'baseline_nearest_fcfs' = 'resource_aware'
 ): SimInput {
   if (scenario.incident_lat == null || scenario.incident_lng == null) {
     throw new Error('Scenario must have incident coordinates set.');
@@ -158,6 +159,7 @@ export function buildSimInput(
   const input: SimInput = {
     scenarioId: scenario.id,
     scenarioTitle: scenario.title,
+    policy,
     incidentNodeId: incidentSnap.nodeId,
     incidentSnap,
     hospitals: Object.freeze(simHospitals),
@@ -218,6 +220,7 @@ export function createRun(input: SimInput): SimState {
 
   return {
     status: 'idle',
+    policy: input.policy || 'resource_aware',
     tick: 0,
     simSeconds: 0,
     events: [],

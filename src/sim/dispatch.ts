@@ -85,10 +85,12 @@ export function claim(
 ): boolean {
   const waitingGroups = state.victimGroups
     .filter((g) => g.status === 'waiting')
-    .sort(
-      (x, y) =>
-        PRIORITY[x.type] - PRIORITY[y.type] || x.sequence - y.sequence,
-    );
+    .sort((x, y) => {
+      if (state.policy === 'baseline_nearest_fcfs') {
+        return x.sequence - y.sequence;
+      }
+      return PRIORITY[x.type] - PRIORITY[y.type] || x.sequence - y.sequence;
+    });
 
   const group = waitingGroups[0];
   if (!group) return false;
@@ -128,8 +130,9 @@ export function claim(
     patientIds: [...batch.patientIds],
     route: [...a.currentPath],
     reassignment: a.trips > 0,
-    reason:
-      'Highest-priority waiting group; stable fleet order; capacity-sized batch; A* route',
+    reason: state.policy === 'baseline_nearest_fcfs'
+      ? 'baseline: first-come-first-served (arrival order)'
+      : 'Highest-priority waiting group; stable fleet order; capacity-sized batch; A* route',
   });
 
   if (!route) {
