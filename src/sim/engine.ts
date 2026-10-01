@@ -311,6 +311,7 @@ export class SimEngine {
       edgeProgress: 0,
       distanceTravelledOnEdge: 0,
     });
+    a.currentEdgeProgress = null;
   }
 
   /**
@@ -359,11 +360,18 @@ export class SimEngine {
       }
     }
 
-    // Update overall path progress.
+    // Update overall path progress and detailed edge progress.
     if (mov.edgeIndex >= a.currentPath.length - 1) {
       a.pathProgress = 1;
+      a.currentEdgeProgress = null;
     } else {
       a.pathProgress = (mov.edgeIndex + mov.edgeProgress) / (a.currentPath.length - 1);
+      a.currentEdgeProgress = {
+        from: a.currentPath[mov.edgeIndex],
+        to: a.currentPath[mov.edgeIndex + 1],
+        distanceTravelledOnEdge: mov.distanceTravelledOnEdge,
+        edgeLength: this.edgeLengthMetres(a.currentPath[mov.edgeIndex], a.currentPath[mov.edgeIndex + 1])
+      };
     }
   }
 
@@ -423,14 +431,41 @@ export class SimEngine {
     if (!a.destination) return;
 
     const oldPath = [...a.currentPath];
-    const route = astar(this.graph, a.currentNode, a.destination);
+    let routeStartNode = a.currentNode;
+    let keepFirstEdge = false;
+    const mov = this.movement.get(a.id);
+    let fromId: string | null = null;
+    
+    // If the ambulance is mid-edge, it must finish the current edge before diverting.
+    if (mov && a.currentPath.length > 1 && mov.edgeIndex < a.currentPath.length - 1 && mov.edgeProgress > 0) {
+       fromId = a.currentPath[mov.edgeIndex];
+       routeStartNode = a.currentPath[mov.edgeIndex + 1];
+       keepFirstEdge = true;
+    }
+
+    const route = astar(this.graph, routeStartNode, a.destination);
 
     if (!route) {
       this.movement.delete(a.id);
       markStuck(this.state, a, a.status, `No reachable route to ${a.destination}`, this.graph);
     } else {
-      a.currentPath = route.path;
-      this.initMovement(a);
+      if (keepFirstEdge && fromId) {
+         a.currentPath = [fromId, ...route.path];
+         mov!.edgeIndex = 0;
+         // edgeProgress and distanceTravelledOnEdge are preserved
+         if (a.currentPath.length > 1) {
+           a.pathProgress = (mov!.edgeIndex + mov!.edgeProgress) / (a.currentPath.length - 1);
+           a.currentEdgeProgress = {
+             from: a.currentPath[0],
+             to: a.currentPath[1],
+             distanceTravelledOnEdge: mov!.distanceTravelledOnEdge,
+             edgeLength: this.edgeLengthMetres(a.currentPath[0], a.currentPath[1])
+           };
+         }
+      } else {
+         a.currentPath = route.path;
+         this.initMovement(a);
+      }
       simEvent(this.state, 'reroute', `${a.id}: route recomputed`, {
         ambulanceId: a.id,
         reason: 'Road blockage changed',

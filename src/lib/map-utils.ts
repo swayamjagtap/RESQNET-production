@@ -158,45 +158,23 @@ export function getMapPoints(
   for (const a of ambList) {
     let bearing = 0;
     
-    if (a.currentPath && a.currentPath.length >= 2 && a.pathProgress !== undefined) {
-      const numEdges = a.currentPath.length - 1;
-      const rawProgress = a.pathProgress * numEdges;
-      let edgeIndex = Math.floor(rawProgress);
-      let edgeFraction = rawProgress - edgeIndex;
+    if (a.currentEdgeProgress) {
+      // Use the exact edge progress from the engine
+      let fromId = a.currentEdgeProgress.from;
+      let toId = a.currentEdgeProgress.to;
+      let distanceOnEdge = a.currentEdgeProgress.distanceTravelledOnEdge;
       
-      if (edgeIndex >= numEdges) {
-        edgeIndex = numEdges - 1;
-        edgeFraction = 1;
-      }
-      
-      // Compute additional distance if currently moving
       const isMoving = a.status === 'to_incident' || a.status === 'to_hospital';
       let additionalMetres = (isMoving && isRunning) ? (interpolationFraction * AMBULANCE_SPEED_MPS) : 0;
+      distanceOnEdge += additionalMetres;
       
-      let fromId = a.currentPath[edgeIndex];
-      let toId = a.currentPath[edgeIndex + 1];
       let edge = graph.edges.find(e => 
         (e.from === fromId && e.to === toId) || 
         (e.from === toId && e.to === fromId)
       );
       
-      let distanceOnEdge = edge ? (edgeFraction * edge.lengthMetres + additionalMetres) : 0;
-      
-      // Advance edge if interpolation pushes us into the next edge
-      while (edge && distanceOnEdge > edge.lengthMetres && edgeIndex < numEdges - 1) {
-        distanceOnEdge -= edge.lengthMetres;
-        edgeIndex++;
-        fromId = a.currentPath[edgeIndex];
-        toId = a.currentPath[edgeIndex + 1];
-        edge = graph.edges.find(e => 
-          (e.from === fromId && e.to === toId) || 
-          (e.from === toId && e.to === fromId)
-        );
-      }
-      
-      if (edgeIndex >= numEdges) {
-        edgeIndex = numEdges - 1;
-        if (edge) distanceOnEdge = edge.lengthMetres;
+      if (edge && distanceOnEdge > edge.lengthMetres) {
+         distanceOnEdge = edge.lengthMetres;
       }
       
       if (edge) {

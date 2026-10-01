@@ -177,6 +177,12 @@ export interface SimAmbulance {
   currentNode: string;
   currentPath: string[];
   pathProgress: number;
+  currentEdgeProgress?: {
+    from: string;
+    to: string;
+    distanceTravelledOnEdge: number;
+    edgeLength: number;
+  } | null;
   destination: string | null;
   stuckReason: string | null;
   hospitalReservation: HospitalReservation | null;
