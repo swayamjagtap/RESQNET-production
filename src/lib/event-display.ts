@@ -103,10 +103,12 @@ export function describeEvent(e: SimEvent, maps: DisplayNameMaps): string {
   if (e.kind === 'dispatch') {
     const amb = getAmb(e.ambulanceId);
     const reassigned = e.reassignment ? 'reassigned' : 'dispatched';
+    const patientCount = Array.isArray(e.patientIds) ? e.patientIds.length : 0;
+    const patientsStr = patientCount === 1 ? '1 patient' : `${patientCount} patients`;
     const pids = Array.isArray(e.patientIds) ? e.patientIds.join(', ') : '';
     const route = routeToNames(e.route as string[], maps);
     const reason = e.reason || '';
-    return `${amb} ${reassigned}: ${pids}. ${replaceIds(text)}. Route: ${route}. ${reason}.`;
+    return `${amb} ${reassigned}: ${patientsStr} (${pids}). ${replaceIds(text)}. Route: ${route}. ${reason}.`;
   }
   if (e.kind === 'hospital_select') {
     const reason = e.reason || '';
@@ -118,7 +120,7 @@ export function describeEvent(e: SimEvent, maps: DisplayNameMaps): string {
       const hName = getHosp(c.hospitalId);
       const status = !c.reachable ? 'unreachable' : (c.sufficient ? 'eligible' : 'insufficient');
       const avail = needs.map((k: string) => `${k} ${(c.available || {})[k]}/${count}`).join(', ');
-      const costStr = c.reachable && c.cost !== null ? `; cost ${c.cost.toFixed(1)}` : '';
+      const costStr = c.reachable && c.cost !== null ? `; weighted route length ${c.cost.toFixed(1)} m` : '';
       return `${hName}: ${status} (${avail}${costStr})`;
     }).join('; ');
     
@@ -128,13 +130,14 @@ export function describeEvent(e: SimEvent, maps: DisplayNameMaps): string {
     const amb = getAmb(e.ambulanceId);
     const hosp = getHosp(e.hospitalId);
     const count = e.count || 0;
+    const countStr = count === 1 ? '1 patient' : `${count} patients`;
     const pids = Array.isArray(e.patientIds) ? e.patientIds.join(', ') : '';
     
     const before = e.before as Record<string, number> || {};
     const after = e.after as Record<string, number> || {};
     const stockStr = Object.keys(before).map(k => `${k} ${before[k]} → ${after[k]}`).join(', ');
     
-    return `${amb} delivered ${count} patients to ${hosp}; ${pids}; stock ${stockStr}.`;
+    return `${amb} delivered ${countStr} to ${hosp} (${pids}); stock ${stockStr}.`;
   }
   if (e.kind === 'reroute') {
     const oldR = routeToNames(e.oldPath as string[], maps);

@@ -28,7 +28,7 @@ describe('describeEvent formatting', () => {
       reason: 'Standard dispatch'
     });
     const result = describeEvent(e, maps);
-    expect(result).toBe('AMB-1 dispatched: p1, p2. Raw text. Route: Junction 1 → Junction 2 → Junction 3. Standard dispatch.');
+    expect(result).toBe('AMB-1 dispatched: 2 patients (p1, p2). Raw text. Route: Junction 1 → Junction 2 → Junction 3. Standard dispatch.');
   });
 
   it('formats hospital_select events with candidates', () => {
@@ -43,7 +43,7 @@ describe('describeEvent formatting', () => {
       ]
     });
     const result = describeEvent(e, maps);
-    expect(result).toBe('Raw text. Best match. HOSPITAL-1: eligible (icu 3/2, blood 5/2; cost 120.5); HOSPITAL-2: insufficient (icu 1/2, blood 1/2; cost 50.0); h3: unreachable (icu 10/2, blood 10/2).');
+    expect(result).toBe('Raw text. Best match. HOSPITAL-1: eligible (icu 3/2, blood 5/2; weighted route length 120.5 m); HOSPITAL-2: insufficient (icu 1/2, blood 1/2; weighted route length 50.0 m); h3: unreachable (icu 10/2, blood 10/2).');
   });
 
   it('formats delivery events showing stock changes', () => {
@@ -56,7 +56,7 @@ describe('describeEvent formatting', () => {
       after: { icu: 3, blood: 8 }
     });
     const result = describeEvent(e, maps);
-    expect(result).toBe('AMB-1 delivered 2 patients to HOSPITAL-1; p1, p2; stock icu 5 → 3, blood 10 → 8.');
+    expect(result).toBe('AMB-1 delivered 2 patients to HOSPITAL-1 (p1, p2); stock icu 5 → 3, blood 10 → 8.');
   });
 
   it('formats reroute events with old and new paths', () => {

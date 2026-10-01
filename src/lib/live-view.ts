@@ -7,6 +7,10 @@ export interface LiveAmbulance {
   onboard: number;
   capacity: number;
   destinationName: string;
+  destinationId: string | null;
+  currentNode: string;
+  stuckReason: string | null;
+  trips: number;
 }
 
 export interface LiveView {
@@ -44,7 +48,11 @@ export function extractLiveView(state: SimState | null): LiveView {
       status: a.status,
       onboard: a.cargo.reduce((sum, g) => sum + g.count, 0),
       capacity: a.capacity,
-      destinationName
+      destinationName,
+      destinationId: a.destination,
+      currentNode: a.currentNode,
+      stuckReason: a.stuckReason,
+      trips: a.trips
     };
   });
 

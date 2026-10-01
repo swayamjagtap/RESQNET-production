@@ -139,6 +139,9 @@ export function RoadLayer({ graph, engine }: { graph: RoadGraph; engine: SimEngi
   useMapEvents({
     click: handleClick,
     mousemove: handleMouseMove,
+    mouseout: () => setHoveredEdgeId(null),
+    dragstart: () => setHoveredEdgeId(null),
+    zoomstart: () => setHoveredEdgeId(null),
   });
 
   return null;

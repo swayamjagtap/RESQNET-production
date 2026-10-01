@@ -185,4 +185,31 @@ describe('real-graph engine run with ledger', () => {
       expect(result.reason).toBe('Entry hash mismatch');
     }
   });
+
+  it('export then verifyChain passes', async () => {
+    const ledger = createLedger();
+    ledger.append({ msg: 'A' });
+    ledger.append({ msg: 'B' });
+    const exported = await ledger.export();
+    const result = await verifyChain(exported);
+    expect(result.ok).toBe(true);
+  });
+
+  it('changing one character in an exported entry fails verifyChain at that entry', async () => {
+    const ledger = createLedger();
+    ledger.append({ msg: 'Hello' });
+    ledger.append({ msg: 'World' });
+    const exported = await ledger.export();
+    
+    // Simulate JSON export/import and tampering
+    let jsonStr = JSON.stringify(exported);
+    jsonStr = jsonStr.replace('"Hello"', '"Jello"');
+    const tampered = JSON.parse(jsonStr);
+
+    const result = await verifyChain(tampered);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.index).toBe(1);
+    }
+  });
 });

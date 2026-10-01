@@ -13,7 +13,7 @@ import { computeCollocationOffset, getMapPoints } from '../lib/map-utils';
 import { buildDisplayNameMaps, describeEvent, isKeyEvent } from '../lib/event-display';
 import { RoadLayer } from '../components/RoadLayer';
 import { ConfigNotice } from '../components/ConfigNotice';
-import { createLedger, failureReport, type Ledger, type LedgerEntry, type VerifyResult } from '../lib/audit';
+import { createLedger, verifyChain, failureReport, time, type Ledger, type LedgerEntry, type VerifyResult } from '../lib/audit';
 import { drainEventsToLedger } from '../lib/ledger-feed';
 import { extractLiveView, type LiveView } from '../lib/live-view';
 
@@ -255,7 +255,7 @@ const SimulationPageContent: React.FC = () => {
 
   // Ledger state
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
-  const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null);
+  const [verifyResult, setVerifyResult] = useState<(VerifyResult & { verifiedCount?: number }) | null>(null);
   const ledgerRef = useRef<Ledger | null>(null);
   const cursorRef = useRef({ current: 0 });
 
@@ -263,6 +263,7 @@ const SimulationPageContent: React.FC = () => {
   const [playing, setPlaying] = useState<boolean>(false);
   const [autoScrollLog, setAutoScrollLog] = useState(true);
   const [showSnapshots, setShowSnapshots] = useState(false);
+  const [showAllFleet, setShowAllFleet] = useState(false);
   const [refitCounter, setRefitCounter] = useState(0);
   const [isDemoMode, setIsDemoMode] = useState(false);
 
@@ -392,6 +393,11 @@ const SimulationPageContent: React.FC = () => {
       if ((st.status as string) === 'resolved') {
         setPlaying(false);
         setLiveView(extractLiveView(st)); // final update
+        if (autoScrollLog) {
+          setTimeout(() => {
+            if (logContainerRef.current) logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+          }, 0);
+        }
       }
     }
     reqRef.current = requestAnimationFrame(updateFrame);
@@ -418,16 +424,21 @@ const SimulationPageContent: React.FC = () => {
   const handleVerify = async () => {
     if (ledgerRef.current) {
       const result = await ledgerRef.current.verify();
-      setVerifyResult(result);
+      setVerifyResult({ ...result, verifiedCount: ledgerEntries.length });
     }
   };
+
+  useEffect(() => {
+    if (liveView?.status === 'resolved' && ledgerRef.current && !verifyResult) {
+      handleVerify();
+    }
+  }, [liveView?.status]);
 
   const handleCorruptDemo = async () => {
     if (ledgerRef.current) {
       try {
         await ledgerRef.current.corrupt(2);
         setVerifyResult(null); // Clear previous verification
-        // The ledger state in our array needs a manual poke to show the text change for the demo
         setLedgerEntries(prev => {
           const arr = [...prev];
           if (arr[1]) arr[1] = { ...arr[1], data: { ...arr[1].data, text: arr[1].data.text + ' [DEMO ALTERATION]' } };
@@ -437,6 +448,42 @@ const SimulationPageContent: React.FC = () => {
         console.error('Corruption demo failed:', err.message);
       }
     }
+  };
+
+  const handleExportLog = () => {
+    if (!ledgerEntries.length) return;
+    const blob = new Blob([JSON.stringify(ledgerEntries, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `resqnet-log-${scenarioId}-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCopyHeadHash = () => {
+    if (ledgerRef.current) {
+      navigator.clipboard.writeText(ledgerRef.current.head());
+    }
+  };
+
+  const handleVerifyExport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const text = evt.target?.result as string;
+        const entries = JSON.parse(text);
+        if (!Array.isArray(entries)) throw new Error('File does not contain an array of entries');
+        const res = await verifyChain(entries);
+        setVerifyResult({ ...res, verifiedCount: entries.length });
+      } catch (err: any) {
+        alert('Invalid log file: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = ''; // Reset
   };
 
   // ──── Readiness gate ────
@@ -565,6 +612,16 @@ const SimulationPageContent: React.FC = () => {
               );
             })}
 
+            {/* Map Legend */}
+            <div style={{ position: 'absolute', bottom: '20px', left: '10px', background: 'rgba(255,255,255,0.9)', padding: '6px 8px', borderRadius: '4px', fontSize: '0.75rem', boxShadow: '0 1px 3px rgba(0,0,0,0.3)', zIndex: 1000, pointerEvents: 'none' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}><div style={{ width: '12px', height: '12px', background: 'white', border: '2px solid #16a34a', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a', fontSize: '8px', fontWeight: 'bold' }}>H</div> Scenario Hospital</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}><div style={{ width: '12px', height: '12px', background: '#ef4444', border: '1px solid white', borderRadius: '50%' }}></div> Incident</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}><div style={{ width: '12px', height: '6px', background: 'white', border: '1px solid black', borderRadius: '2px' }}></div> Ambulance</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}><div style={{ width: '12px', height: '3px', background: '#dc2626', borderTop: '1px dashed white' }}></div> Blocked Road</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}><div style={{ width: '12px', height: '3px', background: '#d97706' }}></div> Partial Road</div>
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>Red crosses on the basemap are OpenStreetMap<br/>places, not scenario hospitals.</div>
+            </div>
+
             {/* Ambulances rendered imperatively via component */}
             <AmbulanceLayer 
               simInput={simInput} stateRef={stateRef} roadGraph={roadGraph} 
@@ -578,46 +635,89 @@ const SimulationPageContent: React.FC = () => {
           <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '0.75rem', maxHeight: '520px' }}>
             {/* Fleet Status */}
             <h3 style={{ marginBottom: '0.4rem', fontSize: '0.95rem' }}>Fleet Status</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', overflowY: 'auto', marginBottom: '0.5rem', maxHeight: '120px' }}>
-              {liveView.ambulances.map(a => {
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', overflowY: 'auto', marginBottom: '0.5rem', maxHeight: '160px' }}>
+              {liveView.ambulances.slice(0, showAllFleet ? undefined : 4).map(a => {
+                let statusText = '';
+                let icon = '';
+                let color = 'inherit';
+                if (a.status === 'to_incident') {
+                  statusText = `→ Incident`;
+                  icon = '🚨';
+                } else if (a.status === 'to_hospital') {
+                  const hospName = displayMaps.hospitalNames.get(a.destinationId || '') || a.destinationName || 'Hospital';
+                  statusText = `→ ${hospName} (carrying ${a.onboard})`;
+                  icon = '🏥';
+                  color = 'var(--primary)';
+                } else if (a.status === 'idle') {
+                  const locName = displayMaps.hospitalNames.get(a.currentNode) || displayMaps.nodeNames.get(a.currentNode) || 'junction';
+                  statusText = `: idle at ${locName}`;
+                  icon = '⏸️';
+                  color = 'var(--text-muted)';
+                } else if (a.status === 'stuck') {
+                  statusText = `: stuck — ${a.stuckReason}`;
+                  icon = '⚠️';
+                  color = 'var(--error)';
+                } else {
+                  statusText = `: ${a.status.replace('_', ' ')}`;
+                  icon = '🚑';
+                }
                 return (
-                  <div key={a.id} style={{ background: 'var(--bg-elevated)', padding: '0.35rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem' }}>
-                    <strong>{a.label}</strong> — <span style={{ color: a.status === 'stuck' ? 'var(--error)' : 'inherit' }}>{a.status}</span>
-                    <span style={{ color: 'var(--text-muted)', marginLeft: '0.5rem' }}>{a.onboard}/{a.capacity} | Dest: {a.destinationName}</span>
+                  <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'var(--bg-elevated)', padding: '0.35rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem', color }}>
+                    <span style={{ fontSize: '1rem' }}>{icon}</span>
+                    <span><strong>{a.label}</strong> {statusText}</span>
                   </div>
                 );
               })}
+              {liveView.ambulances.length > 4 && (
+                <button 
+                  onClick={() => setShowAllFleet(!showAllFleet)} 
+                  style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', textAlign: 'left', padding: '0.2rem 0', fontSize: '0.75rem', fontWeight: 600 }}
+                >
+                  {showAllFleet ? 'Show fewer' : `Show all (${liveView.ambulances.length})`}
+                </button>
+              )}
             </div>
 
             {/* Counters + Log header */}
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.25rem', marginBottom: '0.3rem' }}>
               <h3 style={{ fontSize: '0.95rem', margin: 0 }}>Decision Log</h3>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                {liveView.simSeconds}s · {liveView.deliveredCount} delivered · {liveView.waiting} waiting
+                {time(liveView.simSeconds)} · {liveView.deliveredCount} delivered · {liveView.waiting} waiting
               </span>
             </div>
             
             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.3rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>{ledgerEntries.length} entries · head {headHash.slice(0, 8)}…</span>
-              <button onClick={handleVerify} className="btn btn-secondary" style={{ padding: '2px 6px', fontSize: '0.7rem' }}>Verify log</button>
+              <div style={{ display: 'flex', gap: '0.3rem' }}>
+                <button onClick={handleVerify} className="btn btn-secondary" style={{ padding: '2px 6px', fontSize: '0.7rem' }}>Verify</button>
+                <button onClick={handleCopyHeadHash} className="btn btn-secondary" style={{ padding: '2px 6px', fontSize: '0.7rem' }}>Copy hash</button>
+              </div>
             </div>
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem', flexWrap: 'wrap', gap: '4px' }}>
               <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
                 <input type="checkbox" checked={showSnapshots} onChange={e => setShowSnapshots(e.target.checked)} style={{ width: '12px', height: '12px' }} />
                 Show minute snapshots
               </label>
               
+              <div style={{ display: 'flex', gap: '0.3rem' }}>
+                <button onClick={handleExportLog} className="btn btn-secondary" style={{ padding: '2px 6px', fontSize: '0.7rem' }}>Export</button>
+                <label className="btn btn-secondary" style={{ padding: '2px 6px', fontSize: '0.7rem', cursor: 'pointer', margin: 0 }}>
+                  Verify file
+                  <input type="file" accept=".json" onChange={handleVerifyExport} style={{ display: 'none' }} />
+                </label>
+              </div>
+              
               {isDemoMode && (
                 <button onClick={handleCorruptDemo} style={{ fontSize: '0.7rem', background: '#fecaca', color: '#991b1b', border: '1px solid #f87171', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer' }}>
-                  Corrupt entry 2 (demo)
+                  Corrupt entry 2
                 </button>
               )}
             </div>
             
             {verifyResult && (
               <pre style={{ margin: '0 0 0.5rem 0', padding: '0.4rem', background: verifyResult.ok ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: verifyResult.ok ? 'var(--success)' : 'var(--error)', border: `1px solid ${verifyResult.ok ? 'var(--success)' : 'var(--error)'}`, borderRadius: '4px', fontSize: '0.7rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                {verifyResult.ok ? `✓ ${verifyResult.count} entries verified, chain intact` : failureReport(verifyResult)}
+                {verifyResult.ok ? ((verifyResult as any).verifiedCount !== ledgerEntries.length ? `Verified ${(verifyResult as any).verifiedCount} of ${ledgerEntries.length} entries. Verify again.` : `✓ ${verifyResult.count} entries verified, chain intact`) : failureReport(verifyResult)}
               </pre>
             )}
 
@@ -639,7 +739,7 @@ const SimulationPageContent: React.FC = () => {
                   <div key={e.hash} style={{ marginBottom: '0.4rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.3rem', lineHeight: 1.3 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.15rem' }}>
                       <div>
-                        <span style={{ color: 'var(--text-dim)', marginRight: '0.4rem', fontWeight: 600 }}>T+{e.data.simTime}</span>
+                        <span style={{ color: 'var(--text-dim)', marginRight: '0.4rem', fontWeight: 600 }}>T+{time(e.data.simTime || e.data.simSeconds || 0)}</span>
                         <span style={{ 
                           fontWeight: 600, 
                           color: 'var(--primary)', 
@@ -661,18 +761,23 @@ const SimulationPageContent: React.FC = () => {
                   </div>
                 );
               })}
+              <div style={{ paddingBottom: '30px' }} />
               {!autoScrollLog && (
                 <button
                   onClick={() => setAutoScrollLog(true)}
-                  style={{ position: 'sticky', bottom: '6px', left: '50%', transform: 'translateX(-50%)', background: 'var(--primary)', color: 'white', border: 'none', padding: '3px 8px', borderRadius: '12px', fontSize: '0.7rem', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }}
+                  style={{ position: 'sticky', bottom: '6px', left: '50%', transform: 'translateX(-50%)', background: 'var(--primary)', color: 'white', border: 'none', padding: '3px 8px', borderRadius: '12px', fontSize: '0.7rem', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.4)', zIndex: 10 }}
                 >
                   Jump to latest
                 </button>
               )}
             </div>
-            <div style={{ fontSize: '0.65rem', color: 'var(--text-dim)', marginTop: '0.3rem', textAlign: 'center' }}>
-              Tamper-evident against edits to retained hashes; not immutable. Someone who can rewrite the whole chain can recompute it.
-            </div>
+            
+            <details style={{ fontSize: '0.65rem', color: 'var(--text-dim)', marginTop: '0.3rem' }}>
+              <summary style={{ cursor: 'pointer', outline: 'none' }}>Tamper-evident, not tamper-proof. What does this mean?</summary>
+              <div style={{ marginTop: '0.3rem', paddingLeft: '0.8rem', borderLeft: '2px solid var(--border-color)' }}>
+                Each entry's hash includes the previous entry's hash, so editing an old entry breaks every later link and Verify log reports the first broken entry. The chain is stored in this browser with no outside witness: someone who can rewrite the whole chain can recompute every hash. It is not immutable and not a blockchain.
+              </div>
+            </details>
           </div>
 
           {/* Completion summary */}
@@ -682,7 +787,12 @@ const SimulationPageContent: React.FC = () => {
               <p style={{ fontSize: '0.85rem', marginBottom: '0.2rem' }}>
                 Delivered: {liveView.deliveredCount}. Of these, {liveView.underResourcedCount} arrived at a hospital short of required resources.
               </p>
-              <p style={{ fontSize: '0.85rem', marginBottom: '0.2rem' }}>Elapsed: {liveView.simSeconds} s</p>
+              <p style={{ fontSize: '0.85rem', marginBottom: '0.2rem' }}>
+                Elapsed: {time(liveView.simSeconds)}
+              </p>
+              <p style={{ fontSize: '0.85rem', marginBottom: '0.2rem' }}>
+                Completed trips: {liveView.ambulances.reduce((acc, a) => acc + a.trips, 0)}
+              </p>
               <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
                 Synthetic scenario. Speed assumed {AMBULANCE_SPEED_MPS} m/s. Not medical advice.
               </p>
