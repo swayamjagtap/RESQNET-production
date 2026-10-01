@@ -13,6 +13,9 @@ import { computeCollocationOffset, getMapPoints } from '../lib/map-utils';
 import { buildDisplayNameMaps, formatEventText, isKeyEvent } from '../lib/event-display';
 import { RoadLayer } from '../components/RoadLayer';
 import { ConfigNotice } from '../components/ConfigNotice';
+import { createLedger, failureReport, type Ledger, type LedgerEntry, type VerifyResult } from '../lib/audit';
+import { drainEventsToLedger } from '../lib/ledger-feed';
+import { extractLiveView, type LiveView } from '../lib/live-view';
 
 const PLAYBACK_RATE_NORMAL = 20;
 
@@ -20,7 +23,7 @@ const PLAYBACK_RATE_NORMAL = 20;
 
 function getAmbulanceIcon(label: string, count: number, capacity: number, dx = 0, dy = 0) {
   const short = label.length > 8 ? label.slice(0, 8) + '…' : label;
-  const html = `<div title="${label} · ${count}/${capacity}" style="transform:translate(${dx}px,${dy}px);background:#3b82f6;color:white;padding:2px 6px;border-radius:12px;font-size:0.7rem;font-weight:600;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.4);border:1.5px solid white;cursor:default;max-width:90px;overflow:hidden;text-overflow:ellipsis;">
+  const html = `<div title="${label} · ${count}/${capacity}" style="transform:translate(${dx}px,${dy}px);background:#3b82f6;color:white;padding:2px 6px;border-radius:12px;font-size:0.75rem;font-weight:600;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.4);border:1.5px solid white;cursor:default;">
     ${short}&nbsp;·&nbsp;${count}/${capacity}
   </div>`;
   return L.divIcon({ html, className: '', iconSize: [40, 20], iconAnchor: [20, 10] });
@@ -76,7 +79,7 @@ class SimulationErrorBoundary extends React.Component<{children: React.ReactNode
   }
 }
 
-/* ─────────────────── Readiness logic (exported for tests) ───────────────── */
+/* ─────────────────── Readiness logic ────────────────────────────────────── */
 
 export interface SimPageInputs {
   authLoading: boolean;
@@ -140,28 +143,43 @@ const SimulationPageContent: React.FC = () => {
 
   const [engine, setEngine] = useState<SimEngine | null>(null);
   const [state, setState] = useState<SimState | null>(null);
+  const [liveView, setLiveView] = useState<LiveView | null>(null);
+
+  // Ledger state
+  const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
+  const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null);
+  const ledgerRef = useRef<Ledger | null>(null);
+  const cursorRef = useRef({ current: 0 });
 
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
   const [playing, setPlaying] = useState<boolean>(false);
   const [autoScrollLog, setAutoScrollLog] = useState(true);
   const [showSnapshots, setShowSnapshots] = useState(false);
   const [refitCounter, setRefitCounter] = useState(0);
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   const reqRef = useRef<number>();
   const lastTimeRef = useRef<number>();
   const accRef = useRef<number>(0);
   const logContainerRef = useRef<HTMLDivElement>(null);
-  // Use ref for mutable engine state to avoid stale closure
+  
   const engineRef = useRef<SimEngine | null>(null);
   const stateRef = useRef<SimState | null>(null);
   const playingRef = useRef(false);
   const speedRef = useRef(1);
+  const lastUpdateRef = useRef<number>(0);
 
-  // Keep refs in sync
   useEffect(() => { engineRef.current = engine; }, [engine]);
   useEffect(() => { stateRef.current = state; }, [state]);
   useEffect(() => { playingRef.current = playing; }, [playing]);
   useEffect(() => { speedRef.current = playbackSpeed; }, [playbackSpeed]);
+  
+  useEffect(() => {
+    setIsDemoMode(window.location.hash === '#audit-dev');
+    const handleHash = () => setIsDemoMode(window.location.hash === '#audit-dev');
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, []);
 
   // ──── Load data ────
   useEffect(() => {
@@ -201,7 +219,16 @@ const SimulationPageContent: React.FC = () => {
       const simEngine = new SimEngine(initialRun, roadGraph);
       setEngine(simEngine);
       setState(initialRun);
+      setLiveView(extractLiveView(initialRun));
       setPlaying(false);
+      
+      // Initialize Ledger
+      cursorRef.current = { current: 0 };
+      setLedgerEntries([]);
+      setVerifyResult(null);
+      ledgerRef.current = createLedger((entry) => {
+        setLedgerEntries(prev => [...prev, entry]);
+      });
     } catch (err: any) {
       setError(err.message || 'Failed to initialize simulation engine');
     }
@@ -215,11 +242,20 @@ const SimulationPageContent: React.FC = () => {
     const freshEngine = new SimEngine(freshRun, roadGraph);
     setEngine(freshEngine);
     setState(freshRun);
+    setLiveView(extractLiveView(freshRun));
     accRef.current = 0;
     lastTimeRef.current = undefined;
+    
+    // Fresh Ledger
+    cursorRef.current = { current: 0 };
+    setLedgerEntries([]);
+    setVerifyResult(null);
+    ledgerRef.current = createLedger((entry) => {
+      setLedgerEntries(prev => [...prev, entry]);
+    });
   }, [simInput, roadGraph]);
 
-  // ──── Animation loop (reads from refs to avoid stale closures) ────
+  // ──── Animation loop ────
   const updateFrame = useCallback((time: number) => {
     if (!lastTimeRef.current) lastTimeRef.current = time;
     const deltaMs = time - lastTimeRef.current;
@@ -233,11 +269,21 @@ const SimulationPageContent: React.FC = () => {
       accRef.current = accumulatePlayback(accRef.current, deltaMs, speedRef.current, PLAYBACK_RATE_NORMAL, () => {
         eng.tick();
       });
-      // Spread to trigger re-render with fresh values
-      setState({ ...st });
+      
+      // Drain events to ledger
+      if (ledgerRef.current && cursorRef.current) {
+        drainEventsToLedger(st.events, ledgerRef.current, cursorRef.current);
+      }
+
+      // Throttle UI updates to ~10fps
+      if (time - lastUpdateRef.current > 100) {
+        setLiveView(extractLiveView(st));
+        lastUpdateRef.current = time;
+      }
 
       if ((st.status as string) === 'resolved') {
         setPlaying(false);
+        setLiveView(extractLiveView(st)); // final update
       }
     }
     reqRef.current = requestAnimationFrame(updateFrame);
@@ -253,12 +299,36 @@ const SimulationPageContent: React.FC = () => {
     if (autoScrollLog && logContainerRef.current) {
       logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
     }
-  }, [state?.events?.length, autoScrollLog]);
+  }, [ledgerEntries.length, autoScrollLog]);
 
   const handleLogScroll = () => {
     if (!logContainerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = logContainerRef.current;
-    setAutoScrollLog(scrollHeight - scrollTop - clientHeight < 10);
+    setAutoScrollLog(scrollHeight - scrollTop - clientHeight < 35);
+  };
+
+  const handleVerify = async () => {
+    if (ledgerRef.current) {
+      const result = await ledgerRef.current.verify();
+      setVerifyResult(result);
+    }
+  };
+
+  const handleCorruptDemo = async () => {
+    if (ledgerRef.current) {
+      try {
+        await ledgerRef.current.corrupt(2);
+        setVerifyResult(null); // Clear previous verification
+        // The ledger state in our array needs a manual poke to show the text change for the demo
+        setLedgerEntries(prev => {
+          const arr = [...prev];
+          if (arr[1]) arr[1] = { ...arr[1], data: { ...arr[1].data, text: arr[1].data.text + ' [DEMO ALTERATION]' } };
+          return arr;
+        });
+      } catch (err: any) {
+        console.error('Corruption demo failed:', err.message);
+      }
+    }
   };
 
   // ──── Readiness gate ────
@@ -267,7 +337,7 @@ const SimulationPageContent: React.FC = () => {
     hospitals, ambulances, roadGraph, simInput, state, engine,
   });
 
-  if (renderInfo.mode === 'loading' || renderInfo.mode === 'initializing') {
+  if (renderInfo.mode === 'loading' || renderInfo.mode === 'initializing' || !liveView) {
     return <div className="main-content"><div className="spinner-center"><div className="spinner spinner-lg"/></div></div>;
   }
   if (renderInfo.mode === 'not_configured') return <div className="main-content"><ConfigNotice /></div>;
@@ -288,24 +358,21 @@ const SimulationPageContent: React.FC = () => {
 
   // ──── Ready: build map data ────
   const mapPoints = getMapPoints(simInput, state, roadGraph);
-  const displayMaps = buildDisplayNameMaps(simInput, state);
-
-  // Live counters read directly from the engine's mutable state
-  const liveState = stateRef.current ?? state!;
-  const simSeconds = liveState.simSeconds;
-  const deliveredCount = liveState.deliveredCount;
-  const waitCount = liveState.victimGroups?.filter(g => g.status === 'waiting').reduce((s, g) => s + g.count, 0) ?? 0;
+  const displayMaps = buildDisplayNameMaps(simInput, state, roadGraph);
 
   // Filtered events for log display
-  const allEvents = state?.events ?? [];
-  const displayEvents = showSnapshots ? allEvents : allEvents.filter(isKeyEvent);
+  const displayEntries = showSnapshots 
+    ? ledgerEntries 
+    : ledgerEntries.filter(e => e.data.kind !== 'snapshot' && isKeyEvent(e.data));
 
-  // Deduplicate pre-start road changes: show each changed edge only once
+  // Deduplicate pre-start road changes
   const preStartRoadChangeSeen = new Set<string>();
 
   // Play/Pause button label
-  const isResolved = state?.status === 'resolved';
-  const playLabel = isResolved ? '✓ Done' : playing ? '⏸ Pause' : (state?.status === 'running' && !playing) ? '▶ Resume' : '▶ Start';
+  const isResolved = liveView.status === 'resolved';
+  const playLabel = isResolved ? '✓ Done' : playing ? '⏸ Pause' : (liveView.status === 'running' && !playing) ? '▶ Resume' : '▶ Start';
+  
+  const headHash = ledgerRef.current?.head() || '0'.repeat(64);
 
   return (
     <div className="main-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', height: 'calc(100vh - 80px)' }}>
@@ -344,9 +411,9 @@ const SimulationPageContent: React.FC = () => {
           Incident snapped {simInput.incidentSnap.distanceMetres} m to nearest road (&gt;300 m).
         </div>
       )}
-      {state?.ambulances.some(a => a.status === 'stuck') && (
+      {liveView.ambulances.some(a => a.status === 'stuck') && (
         <div className="alert alert-error" style={{ margin: 0, padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}>
-          ⚠️ Ambulance stuck: {state.ambulances.find(a => a.status === 'stuck')?.stuckReason}
+          ⚠️ Ambulance stuck: {state?.ambulances.find(a => a.status === 'stuck')?.stuckReason}
         </div>
       )}
 
@@ -415,13 +482,11 @@ const SimulationPageContent: React.FC = () => {
             {/* Fleet Status */}
             <h3 style={{ marginBottom: '0.4rem', fontSize: '0.95rem' }}>Fleet Status</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', overflowY: 'auto', marginBottom: '0.5rem', maxHeight: '120px' }}>
-              {state?.ambulances.map(a => {
-                const onboard = a.cargo.reduce((sum, g) => sum + g.count, 0);
+              {liveView.ambulances.map(a => {
                 return (
                   <div key={a.id} style={{ background: 'var(--bg-elevated)', padding: '0.35rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem' }}>
                     <strong>{a.label}</strong> — <span style={{ color: a.status === 'stuck' ? 'var(--error)' : 'inherit' }}>{a.status}</span>
-                    <span style={{ color: 'var(--text-muted)', marginLeft: '0.5rem' }}>{onboard}/{a.capacity}</span>
-                    {a.stuckReason && <div style={{ color: 'var(--error)', fontSize: '0.75rem', marginTop: '0.15rem' }}>{a.stuckReason}</div>}
+                    <span style={{ color: 'var(--text-muted)', marginLeft: '0.5rem' }}>{a.onboard}/{a.capacity} | Dest: {a.destinationName}</span>
                   </div>
                 );
               })}
@@ -431,13 +496,33 @@ const SimulationPageContent: React.FC = () => {
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.25rem', marginBottom: '0.3rem' }}>
               <h3 style={{ fontSize: '0.95rem', margin: 0 }}>Decision Log</h3>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                {simSeconds}s · {deliveredCount} delivered · {waitCount} waiting
+                {liveView.simSeconds}s · {liveView.deliveredCount} delivered · {liveView.waiting} waiting
               </span>
             </div>
-            <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.3rem', cursor: 'pointer' }}>
-              <input type="checkbox" checked={showSnapshots} onChange={e => setShowSnapshots(e.target.checked)} style={{ width: '12px', height: '12px' }} />
-              Show minute snapshots
-            </label>
+            
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.3rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>{ledgerEntries.length} entries · head {headHash.slice(0, 8)}…</span>
+              <button onClick={handleVerify} className="btn btn-secondary" style={{ padding: '2px 6px', fontSize: '0.7rem' }}>Verify log</button>
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+              <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
+                <input type="checkbox" checked={showSnapshots} onChange={e => setShowSnapshots(e.target.checked)} style={{ width: '12px', height: '12px' }} />
+                Show minute snapshots
+              </label>
+              
+              {isDemoMode && (
+                <button onClick={handleCorruptDemo} style={{ fontSize: '0.7rem', background: '#fecaca', color: '#991b1b', border: '1px solid #f87171', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer' }}>
+                  Corrupt entry 2 (demo)
+                </button>
+              )}
+            </div>
+            
+            {verifyResult && (
+              <pre style={{ margin: '0 0 0.5rem 0', padding: '0.4rem', background: verifyResult.ok ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: verifyResult.ok ? 'var(--success)' : 'var(--error)', border: `1px solid ${verifyResult.ok ? 'var(--success)' : 'var(--error)'}`, borderRadius: '4px', fontSize: '0.7rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                {verifyResult.ok ? `✓ ${verifyResult.count} entries verified, chain intact` : failureReport(verifyResult)}
+              </pre>
+            )}
 
             {/* Event log */}
             <div
@@ -445,18 +530,22 @@ const SimulationPageContent: React.FC = () => {
               onScroll={handleLogScroll}
               style={{ flex: 1, overflowY: 'auto', background: 'var(--bg-elevated)', borderRadius: '4px', padding: '0.4rem', fontSize: '0.78rem', position: 'relative', minHeight: '100px' }}
             >
-              {displayEvents.map(e => {
+              {displayEntries.map(e => {
+                const evData = e.data.details || e.data;
                 // Deduplicate pre-start road changes
-                if (e.kind === 'road_change' && e.simSeconds === 0) {
-                  const edgeId = (e as any).edgeId ?? e.text;
+                if (evData.kind === 'road_change' && evData.simSeconds === 0) {
+                  const edgeId = evData.edgeId ?? e.data.text;
                   if (preStartRoadChangeSeen.has(edgeId)) return null;
                   preStartRoadChangeSeen.add(edgeId);
                 }
                 return (
-                  <div key={e.id} style={{ marginBottom: '0.3rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.2rem', lineHeight: 1.3 }}>
-                    <span style={{ color: 'var(--text-dim)', marginRight: '0.4rem' }}>[{e.simSeconds}s]</span>
-                    <span style={{ fontWeight: 600, color: 'var(--primary)', marginRight: '0.3rem' }}>{e.kind.toUpperCase()}</span>
-                    {formatEventText(e.text, displayMaps)}
+                  <div key={e.hash} style={{ marginBottom: '0.3rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.2rem', lineHeight: 1.3 }}>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--text-dim)', marginBottom: '0.1rem' }}>
+                      #{e.data.id} · {e.hash.slice(0, 8)}
+                    </div>
+                    <span style={{ color: 'var(--text-dim)', marginRight: '0.4rem' }}>[{e.data.simTime}]</span>
+                    <span style={{ fontWeight: 600, color: 'var(--primary)', marginRight: '0.3rem' }}>{e.data.kind.toUpperCase()}</span>
+                    {formatEventText(e.data.text, displayMaps)}
                   </div>
                 );
               })}
@@ -469,16 +558,19 @@ const SimulationPageContent: React.FC = () => {
                 </button>
               )}
             </div>
+            <div style={{ fontSize: '0.65rem', color: 'var(--text-dim)', marginTop: '0.3rem', textAlign: 'center' }}>
+              Tamper-evident against edits to retained hashes; not immutable. Someone who can rewrite the whole chain can recompute it.
+            </div>
           </div>
 
           {/* Completion summary */}
-          {state?.status === 'resolved' && (
+          {liveView.status === 'resolved' && (
             <div className="card" style={{ background: 'rgba(34, 197, 94, 0.1)', borderColor: 'var(--success)', padding: '0.75rem' }}>
               <h3 style={{ color: 'var(--success)', marginBottom: '0.4rem', fontSize: '0.95rem' }}>Simulation Complete</h3>
               <p style={{ fontSize: '0.85rem', marginBottom: '0.2rem' }}>
-                Delivered: {state.deliveredCount}. Of these, {state.underResourcedCount} arrived at a hospital short of required resources.
+                Delivered: {liveView.deliveredCount}. Of these, {liveView.underResourcedCount} arrived at a hospital short of required resources.
               </p>
-              <p style={{ fontSize: '0.85rem', marginBottom: '0.2rem' }}>Elapsed: {state.simSeconds} s · Trips: {state.ambulances.reduce((s, a) => s + a.trips, 0)}</p>
+              <p style={{ fontSize: '0.85rem', marginBottom: '0.2rem' }}>Elapsed: {liveView.simSeconds} s</p>
               <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
                 Synthetic scenario. Speed assumed {AMBULANCE_SPEED_MPS} m/s. Not medical advice.
               </p>
