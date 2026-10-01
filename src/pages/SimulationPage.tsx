@@ -21,12 +21,22 @@ const PLAYBACK_RATE_NORMAL = 20;
 
 /* ─────────────────── Icon Helpers ───────────────────────────────────────── */
 
-function getAmbulanceIcon(label: string, count: number, capacity: number, dx = 0, dy = 0) {
+function getAmbulanceIcon(label: string, count: number, capacity: number, bearing: number, dx = 0, dy = 0) {
   const short = label.length > 8 ? label.slice(0, 8) + '…' : label;
-  const html = `<div title="${label} · ${count}/${capacity}" style="transform:translate(${dx}px,${dy}px);background:#3b82f6;color:white;padding:2px 6px;border-radius:12px;font-size:0.75rem;font-weight:600;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.4);border:1.5px solid white;cursor:default;">
-    ${short}&nbsp;·&nbsp;${count}/${capacity}
+  const svg = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(${bearing}deg); background: white; border-radius: 50%; padding: 2px; box-shadow: 0 1px 3px rgba(0,0,0,0.4);">
+    <rect x="2" y="7" width="20" height="10" rx="2" fill="white" />
+    <path d="M12 9v6M9 12h6" stroke="red" stroke-width="3" />
+    <circle cx="6" cy="17" r="2" fill="black" />
+    <circle cx="18" cy="17" r="2" fill="black" />
+  </svg>`;
+  
+  const html = `<div style="transform:translate(${dx}px,${dy}px); display: flex; align-items: center; gap: 4px; pointer-events: none;">
+    ${svg}
+    <div title="${label} · ${count}/${capacity}" style="background:#3b82f6;color:white;padding:2px 6px;border-radius:12px;font-size:0.75rem;font-weight:600;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.4);border:1.5px solid white;cursor:default;">
+      ${short}&nbsp;·&nbsp;${count}/${capacity}
+    </div>
   </div>`;
-  return L.divIcon({ html, className: '', iconSize: [40, 20], iconAnchor: [20, 10] });
+  return L.divIcon({ html, className: '', iconSize: [100, 28], iconAnchor: [14, 14] });
 }
 
 function getHospitalIcon() {
@@ -357,7 +367,10 @@ const SimulationPageContent: React.FC = () => {
   }
 
   // ──── Ready: build map data ────
-  const mapPoints = getMapPoints(simInput, state, roadGraph);
+  const isResolved = liveView.status === 'resolved';
+  const msPerTick = 1000 / (PLAYBACK_RATE_NORMAL * speedRef.current);
+  const interpolationFraction = (playing && !isResolved) ? Math.min(1, accRef.current / msPerTick) : 0;
+  const mapPoints = getMapPoints(simInput, state, roadGraph, interpolationFraction);
   const displayMaps = buildDisplayNameMaps(simInput, state, roadGraph);
 
   // Filtered events for log display
@@ -369,7 +382,6 @@ const SimulationPageContent: React.FC = () => {
   const preStartRoadChangeSeen = new Set<string>();
 
   // Play/Pause button label
-  const isResolved = liveView.status === 'resolved';
   const playLabel = isResolved ? '✓ Done' : playing ? '⏸ Pause' : (liveView.status === 'running' && !playing) ? '▶ Resume' : '▶ Start';
   
   const headHash = ledgerRef.current?.head() || '0'.repeat(64);
@@ -470,7 +482,7 @@ const SimulationPageContent: React.FC = () => {
               }
               const offset = computeCollocationOffset(idx, edgeDirX, edgeDirY);
               const onboard = a.cargo.reduce((sum, g) => sum + g.count, 0);
-              const icon = getAmbulanceIcon(a.label, onboard, a.capacity, offset.dx, offset.dy);
+              const icon = getAmbulanceIcon(a.label, onboard, a.capacity, item.bearing, offset.dx, offset.dy);
               return <Marker key={a.id} position={[item.point.lat, item.point.lng]} icon={icon} />;
             })}
           </MapContainer>

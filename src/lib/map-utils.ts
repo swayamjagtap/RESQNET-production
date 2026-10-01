@@ -1,5 +1,6 @@
 import type { SimInput, SimState, SimAmbulance } from '../sim/types';
 import type { RoadGraph } from '../sim/graph';
+import { haversineMetres } from '../sim/graph';
 
 export function computeCollocationOffset(
   collocatedIndex: number,
@@ -22,6 +23,38 @@ export function computeCollocationOffset(
   };
 }
 
+/**
+ * Computes a coordinate along a polyline given a distance in metres from the start.
+ * If progressMetres <= 0, returns the first point.
+ * If progressMetres >= total length, returns the last point.
+ */
+export function positionAlongPolyline(
+  geometry: [number, number][],
+  progressMetres: number
+): [number, number] {
+  if (geometry.length === 0) return [0, 0];
+  if (geometry.length === 1) return geometry[0];
+  if (progressMetres <= 0) return geometry[0];
+
+  let accumulated = 0;
+  for (let i = 0; i < geometry.length - 1; i++) {
+    const p1 = geometry[i];
+    const p2 = geometry[i + 1];
+    const segLen = haversineMetres(p1[0], p1[1], p2[0], p2[1]);
+    
+    if (accumulated + segLen >= progressMetres) {
+      // It falls on this segment
+      const overflow = progressMetres - accumulated;
+      const fraction = segLen === 0 ? 0 : overflow / segLen;
+      const lat = p1[0] + (p2[0] - p1[0]) * fraction;
+      const lng = p1[1] + (p2[1] - p1[1]) * fraction;
+      return [lat, lng];
+    }
+    accumulated += segLen;
+  }
+  return geometry[geometry.length - 1];
+}
+
 export interface MapPoint {
   lat: number;
   lng: number;
@@ -41,6 +74,7 @@ export interface ValidatedAmbulancePoint {
   currentNode: string;
   point: MapPoint;
   ambulance: SimAmbulance;
+  bearing: number;
 }
 
 export interface ValidatedActiveRoute {
@@ -64,7 +98,8 @@ export function isFinitePoint(lat: unknown, lng: unknown): lat is number {
 export function getMapPoints(
   simInput: SimInput | null,
   state: SimState | null,
-  graph: RoadGraph | null
+  graph: RoadGraph | null,
+  interpolationFraction: number = 0
 ): ValidatedMapPoints {
   const warnings: string[] = [];
   if (!simInput || !graph || !graph.nodes) {
@@ -115,7 +150,95 @@ export function getMapPoints(
   // 3. Ambulance Points
   const ambulances: ValidatedAmbulancePoint[] = [];
   const ambList = state?.ambulances || [];
+  
+  // Speed is 8.3 m/s from engine
+  const AMBULANCE_SPEED_MPS = 8.3;
+  const isRunning = state?.status === 'running';
+
   for (const a of ambList) {
+    let bearing = 0;
+    
+    if (a.currentPath && a.currentPath.length >= 2 && a.pathProgress !== undefined) {
+      const numEdges = a.currentPath.length - 1;
+      const rawProgress = a.pathProgress * numEdges;
+      let edgeIndex = Math.floor(rawProgress);
+      let edgeFraction = rawProgress - edgeIndex;
+      
+      if (edgeIndex >= numEdges) {
+        edgeIndex = numEdges - 1;
+        edgeFraction = 1;
+      }
+      
+      // Compute additional distance if currently moving
+      const isMoving = a.status === 'to_incident' || a.status === 'to_hospital';
+      let additionalMetres = (isMoving && isRunning) ? (interpolationFraction * AMBULANCE_SPEED_MPS) : 0;
+      
+      let fromId = a.currentPath[edgeIndex];
+      let toId = a.currentPath[edgeIndex + 1];
+      let edge = graph.edges.find(e => 
+        (e.from === fromId && e.to === toId) || 
+        (e.from === toId && e.to === fromId)
+      );
+      
+      let distanceOnEdge = edge ? (edgeFraction * edge.lengthMetres + additionalMetres) : 0;
+      
+      // Advance edge if interpolation pushes us into the next edge
+      while (edge && distanceOnEdge > edge.lengthMetres && edgeIndex < numEdges - 1) {
+        distanceOnEdge -= edge.lengthMetres;
+        edgeIndex++;
+        fromId = a.currentPath[edgeIndex];
+        toId = a.currentPath[edgeIndex + 1];
+        edge = graph.edges.find(e => 
+          (e.from === fromId && e.to === toId) || 
+          (e.from === toId && e.to === fromId)
+        );
+      }
+      
+      if (edgeIndex >= numEdges) {
+        edgeIndex = numEdges - 1;
+        if (edge) distanceOnEdge = edge.lengthMetres;
+      }
+      
+      if (edge) {
+        const geom = [...edge.geometry];
+        if (edge.from !== fromId) geom.reverse();
+        
+        const pos = positionAlongPolyline(geom, distanceOnEdge);
+        
+        // Calculate bearing
+        if (geom.length >= 2) {
+          // Find the exact segment we are on to get the correct bearing
+          let accumulated = 0;
+          let p1 = geom[0], p2 = geom[1];
+          for (let i = 0; i < geom.length - 1; i++) {
+            const segLen = haversineMetres(geom[i][0], geom[i][1], geom[i+1][0], geom[i+1][1]);
+            if (accumulated + segLen >= distanceOnEdge - 1e-9 || i === geom.length - 2) {
+              p1 = geom[i];
+              p2 = geom[i+1];
+              break;
+            }
+            accumulated += segLen;
+          }
+          const dLng = p2[1] - p1[1];
+          const dLat = p2[0] - p1[0];
+          bearing = Math.atan2(dLng, dLat) * (180 / Math.PI);
+        }
+        
+        ambulances.push({
+          id: a.id,
+          label: a.label,
+          capacity: a.capacity,
+          currentNode: a.currentNode,
+          point: { lat: pos[0], lng: pos[1] },
+          ambulance: a,
+          bearing,
+        });
+        allPoints.push([pos[0], pos[1]]);
+        continue;
+      }
+    }
+    
+    // Fallback to current node
     const nodeId = a.currentNode;
     const node = graph.nodes[nodeId];
     if (node && isFinitePoint(node.lat, node.lng)) {
@@ -126,6 +249,7 @@ export function getMapPoints(
         currentNode: nodeId,
         point: { lat: node.lat, lng: node.lng },
         ambulance: a,
+        bearing: 0,
       });
       allPoints.push([node.lat, node.lng]);
     } else {
@@ -136,12 +260,29 @@ export function getMapPoints(
   // 4. Active Routes
   const activeRoutes: ValidatedActiveRoute[] = [];
   for (const a of ambList) {
-    if ((a.status === 'to_incident' || a.status === 'to_hospital') && a.currentPath && a.currentPath.length > 0) {
+    if ((a.status === 'to_incident' || a.status === 'to_hospital') && a.currentPath && a.currentPath.length >= 2) {
       const positions: [number, number][] = [];
-      for (const nodeId of a.currentPath) {
-        const node = graph.nodes[nodeId];
-        if (node && isFinitePoint(node.lat, node.lng)) {
-          positions.push([node.lat, node.lng]);
+      for (let i = 0; i < a.currentPath.length - 1; i++) {
+        const fromId = a.currentPath[i];
+        const toId = a.currentPath[i+1];
+        const edge = graph.edges.find(e => 
+          (e.from === fromId && e.to === toId) || 
+          (e.from === toId && e.to === fromId)
+        );
+        if (edge) {
+          const geom = [...edge.geometry];
+          if (edge.from !== fromId) geom.reverse();
+          // To avoid duplicating the shared node at ends of edges, pop the last point if it's not the final edge
+          if (i < a.currentPath.length - 2) geom.pop();
+          positions.push(...geom);
+        } else {
+          // Fallback to straight line
+          const n1 = graph.nodes[fromId];
+          const n2 = graph.nodes[toId];
+          if (n1 && n2) {
+            if (i === 0) positions.push([n1.lat, n1.lng]);
+            positions.push([n2.lat, n2.lng]);
+          }
         }
       }
       if (positions.length >= 2) {
