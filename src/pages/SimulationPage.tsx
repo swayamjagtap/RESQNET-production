@@ -30,7 +30,35 @@ function getHospitalIcon(name: string, icu: number, blood: number, vent: number,
   return L.divIcon({ html, className: '', iconSize: [80, 40], iconAnchor: [40, 20] });
 }
 
-export const SimulationPage: React.FC = () => {
+class SimulationErrorBoundary extends React.Component<{children: React.ReactNode, scenarioId?: string}, {hasError: boolean, error: Error | null}> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="main-content">
+          <div className="card" style={{ borderLeft: '4px solid var(--error)' }}>
+            <h2 style={{ color: 'var(--error)', marginBottom: '1rem' }}>The simulation could not be displayed</h2>
+            <div style={{ background: 'var(--bg-elevated)', padding: '1rem', borderRadius: '4px', fontFamily: 'monospace', fontSize: '0.85rem', marginBottom: '1rem', whiteSpace: 'pre-wrap', color: 'var(--error)' }}>
+              {this.state.error?.message || 'Unknown error'}
+            </div>
+            <Link to={this.props.scenarioId ? `/workspace/${this.props.scenarioId}` : '/'} className="btn btn-secondary">
+              ← Back to scenario
+            </Link>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const SimulationPageContent: React.FC = () => {
   const { scenarioId } = useParams<{ scenarioId: string }>();
   const { user, loading: authLoading, isConfigured } = useAuth();
   
@@ -177,6 +205,10 @@ export const SimulationPage: React.FC = () => {
         </div>
       </div>
     );
+  }
+
+  if (!state || !simInput || !engine) {
+    return <div className="main-content"><div className="spinner-center"><div className="spinner spinner-lg"/></div></div>;
   }
 
   // Active routes mapping
@@ -343,8 +375,7 @@ export const SimulationPage: React.FC = () => {
           {state?.status === 'resolved' && (
             <div className="card" style={{ background: 'rgba(34, 197, 94, 0.1)', borderColor: 'var(--success)' }}>
               <h3 style={{ color: 'var(--success)', marginBottom: '0.5rem' }}>Simulation Completed</h3>
-              <p style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>Delivered: {state.deliveredCount} patients</p>
-              <p style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>Under-resourced: {state.underResourcedCount} patients</p>
+              <p style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>Delivered: {state.deliveredCount}. Of these, {state.underResourcedCount} arrived at a hospital short of required resources.</p>
               <p style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>Elapsed Time: {state.simSeconds}s</p>
               <p style={{ fontSize: '0.9rem', marginBottom: '0.75rem' }}>Trips: {state.ambulances.reduce((s, a) => s + a.trips, 0)}</p>
               <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
@@ -355,5 +386,14 @@ export const SimulationPage: React.FC = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+export const SimulationPage: React.FC = () => {
+  const { scenarioId } = useParams<{ scenarioId: string }>();
+  return (
+    <SimulationErrorBoundary scenarioId={scenarioId}>
+      <SimulationPageContent />
+    </SimulationErrorBoundary>
   );
 };
