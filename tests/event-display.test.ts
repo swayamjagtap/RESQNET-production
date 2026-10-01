@@ -7,7 +7,20 @@ describe('describeEvent formatting', () => {
     ambulanceLabels: new Map([['a1', 'AMB-1']]),
     hospitalNames: new Map([['h1', 'HOSPITAL-1'], ['h2', 'HOSPITAL-2']]),
     roadNames: new Map([['e-1', 'Main St']]),
-    nodeNames: new Map([['n1000001', 'Junction 1'], ['n1000002', 'Junction 2'], ['n1000003', 'Junction 3']]),
+    nodeNames: new Map([
+      ['n1000001', 'Junction 1'], 
+      ['n1000002', 'Junction 2'], 
+      ['n1000003', 'Junction 3'],
+      ['n4', 'a junction on Long Road 4'],
+      ['n5', 'a junction on Long Road 5'],
+      ['n6', 'junction of Road 6 and Road 7'],
+      ['n7', 'junction of Road 8']
+    ]),
+    edgeLengths: new Map([
+      ['n1000001-n1000002', 400],
+      ['n1000002-n1000003', 800],
+      ['n1000001-n1000003', 1200]
+    ])
   };
 
   const createEvent = (kind: SimEvent['kind'], overrides: Record<string, any> = {}): SimEvent => ({
@@ -19,7 +32,7 @@ describe('describeEvent formatting', () => {
     ...overrides
   });
 
-  it('formats dispatch events correctly', () => {
+  it('formats dispatch events correctly with distance', () => {
     const e = createEvent('dispatch', {
       ambulanceId: 'a1',
       reassignment: false,
@@ -28,7 +41,19 @@ describe('describeEvent formatting', () => {
       reason: 'Standard dispatch'
     });
     const result = describeEvent(e, maps);
-    expect(result).toBe('AMB-1 dispatched: 2 patients (p1, p2). Raw text. Route: Junction 1 → Junction 2 → Junction 3. Standard dispatch.');
+    expect(result).toBe('AMB-1 dispatched: 2 patients (p1, p2). Raw text. Route: Junction 1 → Junction 2 → Junction 3 (2 junctions, 1.2 km). Standard dispatch.');
+  });
+
+  it('condenses routes over 5 distinct names', () => {
+    const e = createEvent('dispatch', {
+      ambulanceId: 'a1',
+      reassignment: false,
+      patientIds: ['p1'],
+      route: ['n1000001', 'n1000002', 'n1000003', 'n4', 'n5', 'n6', 'n7'],
+      reason: 'Long route'
+    });
+    const result = describeEvent(e, maps);
+    expect(result).toBe('AMB-1 dispatched: 1 patient (p1). Raw text. Route: Junction 1 → Junction 2 → Junction 3 → Long Road 4 → Long Road 5 → … (6 junctions, 1.2 km). Long route.');
   });
 
   it('formats hospital_select events with candidates', () => {
@@ -66,7 +91,7 @@ describe('describeEvent formatting', () => {
       reason: 'Road blocked'
     });
     const result = describeEvent(e, maps);
-    expect(result).toBe('Raw text. Old: Junction 1 → Junction 2. New: Junction 1 → Junction 3. Road blocked');
+    expect(result).toBe('Raw text. Old: Junction 1 → Junction 2 (1 junctions, 0.4 km). New: Junction 1 → Junction 3 (1 junctions, 1.2 km). Road blocked');
   });
 
   it('formats stuck events', () => {

@@ -14,6 +14,7 @@ import { buildDisplayNameMaps, describeEvent, isKeyEvent } from '../lib/event-di
 import { RoadLayer } from '../components/RoadLayer';
 import { ConfigNotice } from '../components/ConfigNotice';
 import { createLedger, verifyChain, failureReport, time, type Ledger, type LedgerEntry, type VerifyResult } from '../lib/audit';
+import { getAmbulanceStatus } from '../lib/fleet-status';
 import { drainEventsToLedger } from '../lib/ledger-feed';
 import { extractLiveView, type LiveView } from '../lib/live-view';
 
@@ -23,15 +24,17 @@ const PLAYBACK_RATE_NORMAL = 20;
 
 function getAmbulanceIcon(label: string, count: number, capacity: number, bearing: number, dx = 0, dy = 0) {
   const short = label.length > 8 ? label.slice(0, 8) + '…' : label;
-  const svg = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="background: white; border-radius: 50%; padding: 2px; box-shadow: 0 1px 3px rgba(0,0,0,0.4);">
-    <rect x="2" y="7" width="20" height="10" rx="2" fill="white" />
-    <path d="M12 9v6M9 12h6" stroke="red" stroke-width="3" />
-    <circle cx="6" cy="17" r="2" fill="black" />
-    <circle cx="18" cy="17" r="2" fill="black" />
+  const isWest = bearing > 180 && bearing < 360;
+  const svg = `<svg width="28" height="28" viewBox="0 0 64 64" style="background: white; border-radius: 50%; padding: 2px; box-shadow: 0 1px 3px rgba(0,0,0,0.4);">
+    <path d="M 6 42 L 6 22 L 34 22 L 44 22 L 54 30 L 58 30 L 58 42 Z" fill="white" stroke="#374151" stroke-width="2"/>
+    <path d="M 38 22 L 38 32 L 58 32" fill="none" stroke="#374151" stroke-width="2"/>
+    <circle cx="16" cy="44" r="5" fill="#1f2937" />
+    <circle cx="46" cy="44" r="5" fill="#1f2937" />
+    <path d="M 14 32 L 26 32 M 20 26 L 20 38" stroke="#ef4444" stroke-width="4" stroke-linecap="round" />
   </svg>`;
   
   const html = `<div class="amb-wrapper" style="transform:translate(${dx}px,${dy}px); display: flex; align-items: center; gap: 4px; pointer-events: none; width: max-content;">
-    <div class="amb-svg-container" style="transform: rotate(${bearing}deg); display: flex; justify-content: center; align-items: center; transform-origin: center;">
+    <div class="amb-svg-container" style="transform: scaleX(${isWest ? -1 : 1}); display: flex; justify-content: center; align-items: center; transform-origin: center;">
       ${svg}
     </div>
     <div class="amb-text-container" style="background:#3b82f6;color:white;padding:2px 6px;border-radius:12px;font-size:0.75rem;font-weight:600;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.4);border:1.5px solid white;cursor:default;">
@@ -119,7 +122,10 @@ function AmbulanceLayer({
               const el = marker.getElement();
               if (el) {
                  const svgContainer = el.querySelector('.amb-svg-container') as HTMLElement;
-                 if (svgContainer) svgContainer.style.transform = `rotate(${item.bearing}deg)`;
+                 if (svgContainer) {
+                   const isWest = item.bearing > 180 && item.bearing < 360;
+                   svgContainer.style.transform = `scaleX(${isWest ? -1 : 1})`;
+                 }
                  
                  const textContainer = el.querySelector('.amb-text-container') as HTMLElement;
                  if (textContainer) {
@@ -264,6 +270,7 @@ const SimulationPageContent: React.FC = () => {
   const [autoScrollLog, setAutoScrollLog] = useState(true);
   const [showSnapshots, setShowSnapshots] = useState(false);
   const [showAllFleet, setShowAllFleet] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [refitCounter, setRefitCounter] = useState(0);
   const [isDemoMode, setIsDemoMode] = useState(false);
 
@@ -612,22 +619,22 @@ const SimulationPageContent: React.FC = () => {
               );
             })}
 
-            {/* Map Legend */}
-            <div style={{ position: 'absolute', bottom: '20px', left: '10px', background: 'rgba(255,255,255,0.9)', padding: '6px 8px', borderRadius: '4px', fontSize: '0.75rem', boxShadow: '0 1px 3px rgba(0,0,0,0.3)', zIndex: 1000, pointerEvents: 'none' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}><div style={{ width: '12px', height: '12px', background: 'white', border: '2px solid #16a34a', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a', fontSize: '8px', fontWeight: 'bold' }}>H</div> Scenario Hospital</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}><div style={{ width: '12px', height: '12px', background: '#ef4444', border: '1px solid white', borderRadius: '50%' }}></div> Incident</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}><div style={{ width: '12px', height: '6px', background: 'white', border: '1px solid black', borderRadius: '2px' }}></div> Ambulance</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}><div style={{ width: '12px', height: '3px', background: '#dc2626', borderTop: '1px dashed white' }}></div> Blocked Road</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}><div style={{ width: '12px', height: '3px', background: '#d97706' }}></div> Partial Road</div>
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>Red crosses on the basemap are OpenStreetMap<br/>places, not scenario hospitals.</div>
-            </div>
-
             {/* Ambulances rendered imperatively via component */}
             <AmbulanceLayer 
               simInput={simInput} stateRef={stateRef} roadGraph={roadGraph} 
               playingRef={playingRef} accRef={accRef} speedRef={speedRef} 
             />
           </MapContainer>
+        </div>
+
+        {/* Map Legend (Below Map) */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', marginTop: '8px', padding: '0 4px', fontSize: '0.75rem', color: 'var(--text-main)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '14px', background: 'white', border: '2px solid #16a34a', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a', fontSize: '9px', fontWeight: 'bold' }}>H</div> Scenario hospital</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '14px', background: '#ef4444', border: '1px solid white', borderRadius: '50%' }}></div> Incident</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '8px', background: 'white', border: '1px solid black', borderRadius: '2px' }}></div> Ambulance</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '16px', height: '3px', background: '#dc2626', borderTop: '1px dashed white' }}></div> Blocked road</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '16px', height: '3px', background: '#d97706' }}></div> Partial road</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginLeft: 'auto' }}>Red crosses on the basemap are OpenStreetMap places, not scenario hospitals.</div>
         </div>
 
         {/* ──── Dashboard ──── */}
@@ -637,34 +644,11 @@ const SimulationPageContent: React.FC = () => {
             <h3 style={{ marginBottom: '0.4rem', fontSize: '0.95rem' }}>Fleet Status</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', overflowY: 'auto', marginBottom: '0.5rem', maxHeight: '160px' }}>
               {liveView.ambulances.slice(0, showAllFleet ? undefined : 4).map(a => {
-                let statusText = '';
-                let icon = '';
-                let color = 'inherit';
-                if (a.status === 'to_incident') {
-                  statusText = `→ Incident`;
-                  icon = '🚨';
-                } else if (a.status === 'to_hospital') {
-                  const hospName = displayMaps.hospitalNames.get(a.destinationId || '') || a.destinationName || 'Hospital';
-                  statusText = `→ ${hospName} (carrying ${a.onboard})`;
-                  icon = '🏥';
-                  color = 'var(--primary)';
-                } else if (a.status === 'idle') {
-                  const locName = displayMaps.hospitalNames.get(a.currentNode) || displayMaps.nodeNames.get(a.currentNode) || 'junction';
-                  statusText = `: idle at ${locName}`;
-                  icon = '⏸️';
-                  color = 'var(--text-muted)';
-                } else if (a.status === 'stuck') {
-                  statusText = `: stuck — ${a.stuckReason}`;
-                  icon = '⚠️';
-                  color = 'var(--error)';
-                } else {
-                  statusText = `: ${a.status.replace('_', ' ')}`;
-                  icon = '🚑';
-                }
+                const { text, icon, color } = getAmbulanceStatus(a, liveView.simSeconds > 0, displayMaps);
                 return (
                   <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'var(--bg-elevated)', padding: '0.35rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem', color }}>
                     <span style={{ fontSize: '1rem' }}>{icon}</span>
-                    <span><strong>{a.label}</strong> {statusText}</span>
+                    <span><strong>{a.label}</strong> {text}</span>
                   </div>
                 );
               })}
@@ -688,9 +672,34 @@ const SimulationPageContent: React.FC = () => {
             
             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.3rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>{ledgerEntries.length} entries · head {headHash.slice(0, 8)}…</span>
-              <div style={{ display: 'flex', gap: '0.3rem' }}>
+              <div style={{ display: 'flex', gap: '0.3rem', position: 'relative' }}>
                 <button onClick={handleVerify} className="btn btn-secondary" style={{ padding: '2px 6px', fontSize: '0.7rem' }}>Verify</button>
-                <button onClick={handleCopyHeadHash} className="btn btn-secondary" style={{ padding: '2px 6px', fontSize: '0.7rem' }}>Copy hash</button>
+                <button 
+                  onClick={() => setShowMoreMenu(!showMoreMenu)} 
+                  onBlur={() => setTimeout(() => setShowMoreMenu(false), 150)}
+                  className="btn btn-secondary" 
+                  style={{ padding: '2px 6px', fontSize: '0.7rem' }}
+                  aria-haspopup="true"
+                  aria-expanded={showMoreMenu}
+                >
+                  More ▾
+                </button>
+                
+                {showMoreMenu && (
+                  <div style={{ 
+                    position: 'absolute', right: 0, top: '100%', marginTop: '4px', 
+                    background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', 
+                    borderRadius: '4px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', 
+                    zIndex: 100, minWidth: '120px', display: 'flex', flexDirection: 'column'
+                  }}>
+                    <button onClick={handleCopyHeadHash} style={{ padding: '6px 12px', fontSize: '0.75rem', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)', borderBottom: '1px solid var(--border-color)' }}>Copy head hash</button>
+                    <button onClick={handleExportLog} style={{ padding: '6px 12px', fontSize: '0.75rem', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)', borderBottom: '1px solid var(--border-color)' }}>Export log (JSON)</button>
+                    <label style={{ padding: '6px 12px', fontSize: '0.75rem', cursor: 'pointer', color: 'var(--text-main)' }}>
+                      Verify exported log
+                      <input type="file" accept=".json" onChange={handleVerifyExport} style={{ display: 'none' }} />
+                    </label>
+                  </div>
+                )}
               </div>
             </div>
             
@@ -699,14 +708,6 @@ const SimulationPageContent: React.FC = () => {
                 <input type="checkbox" checked={showSnapshots} onChange={e => setShowSnapshots(e.target.checked)} style={{ width: '12px', height: '12px' }} />
                 Show minute snapshots
               </label>
-              
-              <div style={{ display: 'flex', gap: '0.3rem' }}>
-                <button onClick={handleExportLog} className="btn btn-secondary" style={{ padding: '2px 6px', fontSize: '0.7rem' }}>Export</button>
-                <label className="btn btn-secondary" style={{ padding: '2px 6px', fontSize: '0.7rem', cursor: 'pointer', margin: 0 }}>
-                  Verify file
-                  <input type="file" accept=".json" onChange={handleVerifyExport} style={{ display: 'none' }} />
-                </label>
-              </div>
               
               {isDemoMode && (
                 <button onClick={handleCorruptDemo} style={{ fontSize: '0.7rem', background: '#fecaca', color: '#991b1b', border: '1px solid #f87171', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer' }}>
@@ -739,7 +740,7 @@ const SimulationPageContent: React.FC = () => {
                   <div key={e.hash} style={{ marginBottom: '0.4rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.3rem', lineHeight: 1.3 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.15rem' }}>
                       <div>
-                        <span style={{ color: 'var(--text-dim)', marginRight: '0.4rem', fontWeight: 600 }}>T+{time(e.data.simTime || e.data.simSeconds || 0)}</span>
+                        <span style={{ color: 'var(--text-dim)', marginRight: '0.4rem', fontWeight: 600 }}>T+{e.data.simTime || time(e.data.simSeconds || 0)}</span>
                         <span style={{ 
                           fontWeight: 600, 
                           color: 'var(--primary)', 

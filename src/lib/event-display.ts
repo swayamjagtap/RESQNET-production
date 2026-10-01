@@ -10,6 +10,7 @@ export interface DisplayNameMaps {
   hospitalNames: Map<string, string>;    // id -> name
   roadNames: Map<string, string>;        // edge id -> name
   nodeNames: Map<string, string>;        // node id -> display name
+  edgeLengths: Map<string, number>;      // "from-to" -> length in metres
 }
 
 export function buildDisplayNameMaps(
@@ -21,6 +22,7 @@ export function buildDisplayNameMaps(
   const hospitalNames = new Map<string, string>();
   const roadNames = new Map<string, string>();
   const nodeNames = new Map<string, string>();
+  const edgeLengths = new Map<string, number>();
 
   if (simInput) {
     for (const a of simInput.ambulances) {
@@ -43,11 +45,14 @@ export function buildDisplayNameMaps(
     // Collect road names for each node
     const nodeRoads = new Map<string, Set<string>>();
     for (const edge of graph.edges) {
+      edgeLengths.set(`${edge.from}-${edge.to}`, edge.lengthMetres);
+      edgeLengths.set(`${edge.to}-${edge.from}`, edge.lengthMetres);
       if (edge.name) {
+        const cleanName = edge.name.replace(/;/g, ' / ');
         if (!nodeRoads.has(edge.from)) nodeRoads.set(edge.from, new Set());
         if (!nodeRoads.has(edge.to)) nodeRoads.set(edge.to, new Set());
-        nodeRoads.get(edge.from)!.add(edge.name);
-        nodeRoads.get(edge.to)!.add(edge.name);
+        nodeRoads.get(edge.from)!.add(cleanName);
+        nodeRoads.get(edge.to)!.add(cleanName);
       }
     }
     
@@ -66,19 +71,33 @@ export function buildDisplayNameMaps(
     }
   }
 
-  return { ambulanceLabels, hospitalNames, roadNames, nodeNames };
+  return { ambulanceLabels, hospitalNames, roadNames, nodeNames, edgeLengths };
 }
 
-/** Map a sequence of node IDs to road/junction names. */
+/** Map a sequence of node IDs to road/junction names and compute distance. */
 function routeToNames(route: string[] | undefined, maps: DisplayNameMaps): string {
   if (!route || route.length === 0) return 'unreachable';
+  let totalMetres = 0;
+  for (let i = 0; i < route.length - 1; i++) {
+    totalMetres += maps.edgeLengths.get(`${route[i]}-${route[i + 1]}`) || 0;
+  }
+  
   const names = route.map(id => maps.nodeNames.get(id) || 'junction');
-  // Deduplicate consecutive identical names
+  // Deduplicate consecutive identical names and ignore plain 'junction' unless it's the only thing
   const deduped: string[] = [];
   for (const n of names) {
-    if (n !== deduped[deduped.length - 1]) deduped.push(n);
+    if (n !== 'junction' && n !== deduped[deduped.length - 1]) deduped.push(n);
   }
-  return deduped.join(' → ');
+  
+  // If we filtered everything, fallback
+  if (deduped.length === 0) deduped.push(names[0]);
+
+  // Take first up to 5
+  let routeStr = deduped.slice(0, 5).map(s => s.replace(/^a junction on /, '').replace(/^junction of /, '')).join(' → ');
+  if (deduped.length > 5) routeStr += ' → …';
+
+  const km = (totalMetres / 1000).toFixed(1);
+  return `${routeStr} (${route.length - 1} junctions, ${km} km)`;
 }
 
 /** 
