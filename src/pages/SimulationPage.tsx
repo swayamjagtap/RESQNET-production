@@ -58,6 +58,74 @@ class SimulationErrorBoundary extends React.Component<{children: React.ReactNode
   }
 }
 
+export interface SimPageInputs {
+  authLoading: boolean;
+  loading: boolean;
+  isConfigured: boolean;
+  error: string | null;
+  scenario: Scenario | null;
+  hospitals: Hospital[];
+  ambulances: Ambulance[];
+  roadGraph: any;
+  simInput: any;
+  state: SimState | null;
+  engine: SimEngine | null;
+}
+
+export type SimPageRenderMode =
+  | 'loading'
+  | 'not_configured'
+  | 'error'
+  | 'not_ready'
+  | 'initializing'
+  | 'ready';
+
+export function getSimulationRenderMode(inputs: SimPageInputs): {
+  mode: SimPageRenderMode;
+  missingItems: string[];
+} {
+  if (inputs.authLoading || inputs.loading) {
+    return { mode: 'loading', missingItems: [] };
+  }
+  if (!inputs.isConfigured) {
+    return { mode: 'not_configured', missingItems: [] };
+  }
+  if (inputs.error) {
+    return { mode: 'error', missingItems: [] };
+  }
+
+  const scenario = inputs.scenario;
+  const totalCasualties =
+    (scenario?.fracture || 0) +
+    (scenario?.blood_loss || 0) +
+    (scenario?.unconscious || 0) +
+    (scenario?.limb_loss || 0);
+
+  const missingItems: string[] = [];
+  if (!scenario?.incident_lat || !scenario?.incident_lng) {
+    missingItems.push('Missing incident location.');
+  }
+  if (inputs.hospitals.length === 0) {
+    missingItems.push('Missing hospitals (need at least 1).');
+  }
+  if (inputs.ambulances.length === 0) {
+    missingItems.push('Missing ambulances (need at least 1).');
+  }
+  if (totalCasualties === 0) {
+    missingItems.push('Missing casualties (need at least 1).');
+  }
+
+  if (missingItems.length > 0) {
+    return { mode: 'not_ready', missingItems };
+  }
+
+  if (!inputs.simInput || !inputs.state || !inputs.engine || !inputs.roadGraph) {
+    return { mode: 'initializing', missingItems: [] };
+  }
+
+  return { mode: 'ready', missingItems: [] };
+}
+
 const SimulationPageContent: React.FC = () => {
   const { scenarioId } = useParams<{ scenarioId: string }>();
   const { user, loading: authLoading, isConfigured } = useAuth();
@@ -118,13 +186,17 @@ const SimulationPageContent: React.FC = () => {
     const totalCasualties = (scenario.fracture||0) + (scenario.blood_loss||0) + (scenario.unconscious||0) + (scenario.limb_loss||0);
     if (!scenario.incident_lat || !scenario.incident_lng || totalCasualties === 0) return;
     
-    const input = buildSimInput(scenario, hospitals, ambulances, roadGraph);
-    setSimInput(input);
-    const initialRun = createRun(input);
-    const simEngine = new SimEngine(initialRun, roadGraph);
-    setEngine(simEngine);
-    setState(initialRun);
-    setPlaying(false);
+    try {
+      const input = buildSimInput(scenario, hospitals, ambulances, roadGraph);
+      setSimInput(input);
+      const initialRun = createRun(input);
+      const simEngine = new SimEngine(initialRun, roadGraph);
+      setEngine(simEngine);
+      setState(initialRun);
+      setPlaying(false);
+    } catch (err: any) {
+      setError(err.message || 'Failed to initialize simulation engine');
+    }
   }, [scenario, hospitals, ambulances, roadGraph]);
 
   const handleReset = useCallback(() => {
@@ -183,32 +255,43 @@ const SimulationPageContent: React.FC = () => {
     setAutoScrollLog(isAtBottom);
   };
 
-  if (authLoading || loading) return <div className="main-content"><div className="spinner-center"><div className="spinner spinner-lg"/></div></div>;
-  if (!isConfigured) return <div className="main-content"><ConfigNotice /></div>;
-  if (error) return <div className="main-content"><div className="alert alert-error">{error}</div></div>;
+  const renderInfo = getSimulationRenderMode({
+    authLoading,
+    loading,
+    isConfigured,
+    error,
+    scenario,
+    hospitals,
+    ambulances,
+    roadGraph,
+    simInput,
+    state,
+    engine,
+  });
 
-  const totalCasualties = (scenario?.fracture||0) + (scenario?.blood_loss||0) + (scenario?.unconscious||0) + (scenario?.limb_loss||0);
-  const ready = scenario?.incident_lat != null && hospitals.length > 0 && ambulances.length > 0 && totalCasualties > 0;
-
-  if (!ready) {
+  if (renderInfo.mode === 'loading' || renderInfo.mode === 'initializing') {
+    return <div className="main-content"><div className="spinner-center"><div className="spinner spinner-lg"/></div></div>;
+  }
+  if (renderInfo.mode === 'not_configured') {
+    return <div className="main-content"><ConfigNotice /></div>;
+  }
+  if (renderInfo.mode === 'error') {
+    return <div className="main-content"><div className="alert alert-error">{error}</div></div>;
+  }
+  if (renderInfo.mode === 'not_ready') {
     return (
       <div className="main-content">
         <div className="card">
           <h2>Simulation Not Ready</h2>
           <ul style={{ margin: '1rem 0', paddingLeft: '1.5rem', color: 'var(--text-muted)' }}>
-            {!scenario?.incident_lat && <li>Missing incident location.</li>}
-            {hospitals.length === 0 && <li>Missing hospitals (need at least 1).</li>}
-            {ambulances.length === 0 && <li>Missing ambulances (need at least 1).</li>}
-            {totalCasualties === 0 && <li>Missing casualties (need at least 1).</li>}
+            {renderInfo.missingItems.map((item, idx) => (
+              <li key={idx}>{item}</li>
+            ))}
           </ul>
           <Link to={`/workspace/${scenarioId}`} className="btn btn-secondary">← Back to Scenario</Link>
         </div>
       </div>
     );
-  }
-
-  if (!state || !simInput || !engine) {
-    return <div className="main-content"><div className="spinner-center"><div className="spinner spinner-lg"/></div></div>;
   }
 
   // Active routes mapping

@@ -9,6 +9,7 @@ export function RoadLayer({ graph, engine }: { graph: RoadGraph; engine: SimEngi
   const layerRef = useRef<L.FeatureGroup | null>(null);
 
   useEffect(() => {
+    if (!map || !graph || !engine || !graph.edges) return;
     const renderer = L.canvas({ padding: 0.5 });
     const group = L.featureGroup();
 
