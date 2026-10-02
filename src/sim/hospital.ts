@@ -174,14 +174,19 @@ export function selectHospital(
       count,
       route: [...chosen.route!.path],
       reserved: { ...amounts },
-      candidates: considered.map((c) => ({
-        hospitalId: c.hospital.id,
-        available: state.policy === 'baseline_nearest_fcfs' ? { ...actualAvailable } : { ...c.available },
-        coverage: state.policy === 'baseline_nearest_fcfs' ? Math.max(0, Math.min(...needs.map(k => actualAvailable[k]))) : c.coverage,
-        cost: c.route ? c.route.totalCost : null,
-        sufficient: state.policy === 'baseline_nearest_fcfs' ? actuallySufficient : c.sufficient,
-        reachable: !!c.route,
-      })),
+      candidates: considered.map((c) => {
+        const cAvail = state.policy === 'baseline_nearest_fcfs' ? availableResources(c.hospital) : c.available!;
+        const cCov = state.policy === 'baseline_nearest_fcfs' ? Math.max(0, Math.min(...needs.map((k) => cAvail[k]))) : c.coverage;
+        const cSuff = state.policy === 'baseline_nearest_fcfs' ? cCov >= count : c.sufficient;
+        return {
+          hospitalId: c.hospital.id,
+          available: { ...cAvail },
+          coverage: cCov,
+          cost: c.route ? c.route.totalCost : null,
+          sufficient: cSuff,
+          reachable: !!c.route,
+        };
+      }),
     },
   );
 

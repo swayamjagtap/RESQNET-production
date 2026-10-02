@@ -66,25 +66,62 @@ describe('Policy Comparison', () => {
     expect(res.resource_aware.underResourcedCount).toBe(0);
   });
   
-  it('baseline policy never reads hospital stock when choosing', async () => {
-    // If it reads stock during hospital_select, we can catch it by using a Proxy or checking the event reason.
-    // Actually we can just run baseline and check the hospital_select events.
-    const graph = await loadVileParleGraph();
+  it('baseline policy never reads hospital stock when choosing, but correctly logs candidate stock', () => {
+    // We already assert the behavior in the small hand-made graph test.
+    // Let's modify the previous test to also check the events, or just run it here.
+    const graphData: RoadGraphData = {
+      metadata: { source: 'test', query: '', fetchedAt: '', boundingBox: { swLat: 0, swLng: 0, neLat: 0, neLng: 0 }, nodeCount: 3, edgeCount: 4, units: { distance: 'm', coordinates: 'latlng' }, notes: '' },
+      nodes: {
+        'N0': { id: 'N0', lat: 0, lng: 0 },
+        'N1': { id: 'N1', lat: 0.0001, lng: 0 }, 
+        'N2': { id: 'N2', lat: 0.001, lng: 0 },  
+      },
+      edges: [
+        { id: 'E1', from: 'N0', to: 'N1', lengthMetres: 10, geometry: [[0,0], [0.0001,0]] },
+        { id: 'E2', from: 'N0', to: 'N2', lengthMetres: 50, geometry: [[0,0], [0.001,0]] },
+        { id: 'E3', from: 'N1', to: 'N0', lengthMetres: 10, geometry: [[0.0001,0], [0,0]] },
+        { id: 'E4', from: 'N2', to: 'N0', lengthMetres: 50, geometry: [[0.001,0], [0,0]] },
+      ]
+    };
+    const graph = new RoadGraph(graphData);
     
-    const input = buildSimInput(demoScenario, demoHospitals, demoAmbulances, graph, 'baseline_nearest_fcfs');
+    const scenario = {
+      id: 's1', title: 'test', incident_lat: 0, incident_lng: 0,
+      fracture: 0, blood_loss: 0, unconscious: 1, limb_loss: 0
+    } as any;
+    const hospitals = [
+      { id: 'H1', name: 'Near', lat: 0.0001, lng: 0, icu_beds: 10, blood_units: 10, ventilators: 0, general_beds: 10 },
+      { id: 'H2', name: 'Far', lat: 0.001, lng: 0, icu_beds: 10, blood_units: 10, ventilators: 10, general_beds: 10 }
+    ] as any;
+    const ambulances = [
+      { id: 'A1', label: 'A1', base_lat: 0.0001, base_lng: 0, capacity: 1, available: true }
+    ] as any;
+    
+    const input = buildSimInput(scenario, hospitals, ambulances, graph, 'baseline_nearest_fcfs');
     const state = createRun(input);
     const engine = new SimEngine(state, graph);
     engine.start();
     
-    while(state.status !== 'resolved') engine.tick();
+    let maxTicks = 10000;
+    while(state.status !== 'resolved' && maxTicks > 0) { engine.tick(); maxTicks--; }
     
     const selectEvents = state.events.filter(e => e.kind === 'hospital_select');
     expect(selectEvents.length).toBeGreaterThan(0);
     
     for (const ev of selectEvents) {
       expect((ev as any).reason).toBe('baseline: nearest hospital');
-      // The candidates should have coverage=0 and sufficient=false (since they weren't read) or the actual state
-      // We modified hospital_select to return the ACTUAL available stock so it can be rendered.
+      const candidates = (ev as any).candidates;
+      expect(candidates.length).toBeGreaterThan(0);
+      
+      const h1 = candidates.find((c: any) => c.hospitalId === 'H1');
+      const h2 = candidates.find((c: any) => c.hospitalId === 'H2');
+      
+      expect(h1).toBeDefined();
+      expect(h2).toBeDefined();
+      expect(h1.available.vent).toBe(0);
+      expect(h1.sufficient).toBe(false);
+      expect(h2.available.vent).toBe(10);
+      expect(h2.sufficient).toBe(true);
     }
   });
 });

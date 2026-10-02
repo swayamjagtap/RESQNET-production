@@ -20,7 +20,7 @@ const PLAYBACK_RATE_NORMAL = 20;
 
 function getAmbulanceIcon(label: string, count: number, capacity: number, bearing: number, dx = 0, dy = 0) {
   const short = label.length > 8 ? label.slice(0, 8) + '…' : label;
-  const isWest = bearing > 180 && bearing < 360;
+  const isWest = bearing < 0;
   const svg = `<svg width="28" height="28" viewBox="0 0 64 64" style="background: white; border-radius: 50%; padding: 2px; box-shadow: 0 1px 3px rgba(0,0,0,0.4);">
     <path d="M 6 42 L 6 22 L 34 22 L 44 22 L 54 30 L 58 30 L 58 42 Z" fill="white" stroke="#374151" stroke-width="2"/>
     <path d="M 38 22 L 38 32 L 58 32" fill="none" stroke="#374151" stroke-width="2"/>
@@ -119,7 +119,7 @@ function AmbulanceLayer({
               if (el) {
                  const svgContainer = el.querySelector('.amb-svg-container') as HTMLElement;
                  if (svgContainer) {
-                   const isWest = item.bearing > 180 && item.bearing < 360;
+                   const isWest = item.bearing < 0;
                    svgContainer.style.transform = `scaleX(${isWest ? -1 : 1})`;
                  }
                  
@@ -547,56 +547,6 @@ export const SimulationView: React.FC<{
           ⚠️ Ambulance stuck: {state?.ambulances.find(a => a.status === 'stuck')?.stuckReason}
         </div>
       )}
-      
-      {/* ──── Compare Results ──── */}
-      {compareResult && (
-        <div className="card" style={{ padding: '0.75rem', marginBottom: '0.5rem', background: 'var(--bg-elevated)' }}>
-          <h3 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>Policy Comparison</h3>
-          <table style={{ width: '100%', fontSize: '0.8rem', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                <th style={{ padding: '0.3rem' }}>Metric</th>
-                <th style={{ padding: '0.3rem' }}>Resource-aware</th>
-                <th style={{ padding: '0.3rem' }}>Baseline</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style={{ padding: '0.3rem' }}>Delivered</td>
-                <td style={{ padding: '0.3rem' }}>{compareResult.resource_aware.delivered}</td>
-                <td style={{ padding: '0.3rem' }}>{compareResult.baseline.delivered}</td>
-              </tr>
-              <tr style={{ background: 'rgba(0,0,0,0.02)' }}>
-                <td style={{ padding: '0.3rem' }}>Under-resourced arrivals</td>
-                <td style={{ padding: '0.3rem', color: compareResult.resource_aware.underResourcedCount === 0 ? 'var(--success)' : 'var(--error)' }}>
-                  {compareResult.resource_aware.underResourcedCount}
-                </td>
-                <td style={{ padding: '0.3rem', color: compareResult.baseline.underResourcedCount === 0 ? 'var(--success)' : 'var(--error)' }}>
-                  {compareResult.baseline.underResourcedCount}
-                </td>
-              </tr>
-              <tr>
-                <td style={{ padding: '0.3rem' }}>Simulated elapsed</td>
-                <td style={{ padding: '0.3rem' }}>{time(compareResult.resource_aware.simulatedSeconds)}</td>
-                <td style={{ padding: '0.3rem' }}>{time(compareResult.baseline.simulatedSeconds)}</td>
-              </tr>
-              <tr style={{ background: 'rgba(0,0,0,0.02)' }}>
-                <td style={{ padding: '0.3rem' }}>Completed trips</td>
-                <td style={{ padding: '0.3rem' }}>{compareResult.resource_aware.completedTrips}</td>
-                <td style={{ padding: '0.3rem' }}>{compareResult.baseline.completedTrips}</td>
-              </tr>
-              <tr>
-                <td style={{ padding: '0.3rem' }}>Mean high-priority delivery</td>
-                <td style={{ padding: '0.3rem' }}>{compareResult.resource_aware.meanHighPriorityDeliverySeconds !== null ? time(Math.round(compareResult.resource_aware.meanHighPriorityDeliverySeconds)) : 'N/A'}</td>
-                <td style={{ padding: '0.3rem' }}>{compareResult.baseline.meanHighPriorityDeliverySeconds !== null ? time(Math.round(compareResult.baseline.meanHighPriorityDeliverySeconds)) : 'N/A'}</td>
-              </tr>
-            </tbody>
-          </table>
-          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.5rem', marginBottom: 0 }}>
-            One synthetic scenario on the Vile Parle graph. Not a general or clinical claim.
-          </p>
-        </div>
-      )}
 
       {/* ──── Main layout ──── */}
       <style>{`
@@ -816,6 +766,60 @@ export const SimulationView: React.FC<{
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '16px', height: '3px', background: '#d97706' }}></div> Partial road</div>
         <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginLeft: 'auto' }}>Red crosses on the basemap are OpenStreetMap places, not scenario hospitals.</div>
       </div>
+
+      {/* ──── Compare Results ──── */}
+      {compareResult && (
+        <div className="card" style={{ padding: '1rem', marginTop: '1rem', background: 'var(--bg-elevated)', position: 'relative' }}>
+          <button 
+            onClick={() => setCompareResult(null)}
+            style={{ position: 'absolute', top: '0.75rem', right: '0.75rem', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', lineHeight: 1 }}
+            title="Close"
+          >
+            ×
+          </button>
+          <h3 style={{ fontSize: '1.05rem', marginBottom: '0.75rem' }}>Policy Comparison</h3>
+          <p style={{ fontSize: '0.8rem', marginBottom: '1rem' }}>Differences reflect severity-first ordering and stock-aware hospital choice together.</p>
+          <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
+                <th style={{ padding: '0.5rem 0.3rem' }}>Metric</th>
+                <th style={{ padding: '0.5rem 0.3rem' }}>Resource-aware</th>
+                <th style={{ padding: '0.5rem 0.3rem' }}>Baseline</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style={{ padding: '0.5rem 0.3rem' }}>Mean time to hospital, high-priority patients (unconscious, limb loss, blood loss)</td>
+                <td style={{ padding: '0.5rem 0.3rem' }}>{compareResult.resource_aware.meanHighPriorityDeliverySeconds !== null ? time(Math.round(compareResult.resource_aware.meanHighPriorityDeliverySeconds)) : 'N/A'}</td>
+                <td style={{ padding: '0.5rem 0.3rem' }}>{compareResult.baseline.meanHighPriorityDeliverySeconds !== null ? time(Math.round(compareResult.baseline.meanHighPriorityDeliverySeconds)) : 'N/A'}</td>
+              </tr>
+              <tr style={{ background: 'rgba(0,0,0,0.02)' }}>
+                <td style={{ padding: '0.5rem 0.3rem' }}>Patients delivered to a hospital short of required stock</td>
+                <td style={{ padding: '0.5rem 0.3rem', color: compareResult.resource_aware.underResourcedCount === 0 ? 'var(--success)' : 'var(--error)' }}>
+                  {compareResult.resource_aware.underResourcedCount}
+                </td>
+                <td style={{ padding: '0.5rem 0.3rem', color: compareResult.baseline.underResourcedCount === 0 ? 'var(--success)' : 'var(--error)' }}>
+                  {compareResult.baseline.underResourcedCount}
+                </td>
+              </tr>
+              <tr>
+                <td style={{ padding: '0.5rem 0.3rem' }}>Simulated elapsed</td>
+                <td style={{ padding: '0.5rem 0.3rem' }}>{time(compareResult.resource_aware.simulatedSeconds)}</td>
+                <td style={{ padding: '0.5rem 0.3rem' }}>{time(compareResult.baseline.simulatedSeconds)}</td>
+              </tr>
+              <tr style={{ background: 'rgba(0,0,0,0.02)' }}>
+                <td style={{ padding: '0.5rem 0.3rem' }}>Completed trips</td>
+                <td style={{ padding: '0.5rem 0.3rem' }}>{compareResult.resource_aware.completedTrips}</td>
+                <td style={{ padding: '0.5rem 0.3rem' }}>{compareResult.baseline.completedTrips}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.75rem', marginBottom: 0 }}>
+            One synthetic scenario on the Vile Parle graph. Not a general or clinical claim.
+          </p>
+        </div>
+      )}
+
 
       {/* Completion summary */}
       {liveView.status === 'resolved' && (
