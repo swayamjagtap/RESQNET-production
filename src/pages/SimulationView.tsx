@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Polyline, useMap, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import type { Scenario, Hospital, Ambulance } from '../lib/types';
 import { buildSimInput, createRun } from '../sim/adapter';
 import { SimEngine, AMBULANCE_SPEED_MPS } from '../sim/engine';
@@ -600,31 +601,54 @@ export const SimulationView: React.FC<{
 
         {/* 2. KPI strip */}
         {dashboard && (
-          <div className="kpi-strip">
-            <Card style={{ padding: '1rem', textAlign: 'center' }}>
-              <div className="kpi-value">{dashboard.kpis.simulatedTime}</div>
-              <div className="kpi-label">Simulated Time</div>
+          <div className="kpi-strip" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            <Card style={{ padding: '0.75rem 1rem', height: '100px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                <span style={{ fontSize: '1.2rem' }}>⏱️</span>
+                <span className="kpi-label" style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Elapsed</span>
+              </div>
+              <div className="kpi-value" style={{ fontSize: '1.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{dashboard.kpis.simulatedTime}</div>
+              <div className="kpi-context" style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Scenario duration</div>
             </Card>
-            <Card style={{ padding: '1rem', textAlign: 'center' }}>
-              <div className="kpi-value">{dashboard.kpis.delivered} <span style={{fontSize:'1rem', color:'var(--text-muted)'}}>/ {dashboard.kpis.totalPatients}</span></div>
-              <div className="kpi-label">Delivered</div>
+            <Card style={{ padding: '0.75rem 1rem', height: '100px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                <span style={{ fontSize: '1.2rem' }}>🏥</span>
+                <span className="kpi-label" style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Delivered</span>
+              </div>
+              <div className="kpi-value" style={{ fontSize: '1.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{dashboard.kpis.delivered}</div>
+              <div className="kpi-context" style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>of {dashboard.kpis.totalPatients} patients</div>
             </Card>
-            <Card style={{ padding: '1rem', textAlign: 'center' }}>
-              <div className="kpi-value">{dashboard.kpis.onboard}</div>
-              <div className="kpi-label">In Transit</div>
+            <Card style={{ padding: '0.75rem 1rem', height: '100px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                <span style={{ fontSize: '1.2rem' }}>🚑</span>
+                <span className="kpi-label" style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>In Transit</span>
+              </div>
+              <div className="kpi-value" style={{ fontSize: '1.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{dashboard.kpis.onboard}</div>
+              <div className="kpi-context" style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>across fleet</div>
             </Card>
-            <Card style={{ padding: '1rem', textAlign: 'center' }}>
-              <div className="kpi-value">{dashboard.kpis.waiting}</div>
-              <div className="kpi-label">Waiting</div>
-              <div className="kpi-context">({dashboard.kpis.assigned} assigned)</div>
+            <Card style={{ padding: '0.75rem 1rem', height: '100px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                <span style={{ fontSize: '1.2rem' }}>⏳</span>
+                <span className="kpi-label" style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Waiting</span>
+              </div>
+              <div className="kpi-value" style={{ fontSize: '1.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{dashboard.kpis.waiting}</div>
+              <div className="kpi-context" style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{dashboard.kpis.assigned} assigned</div>
             </Card>
-            <Card style={{ padding: '1rem', textAlign: 'center' }}>
-              <div className="kpi-value" style={{ color: dashboard.kpis.deliveredShort > 0 ? 'var(--error)' : 'inherit' }}>{dashboard.kpis.deliveredShort}</div>
-              <div className="kpi-label">Stock Shortfalls</div>
+            <Card style={{ padding: '0.75rem 1rem', height: '100px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                <span style={{ fontSize: '1.2rem' }}>⚠️</span>
+                <span className="kpi-label" style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Shortfalls</span>
+              </div>
+              <div className="kpi-value" style={{ fontSize: '1.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', lineHeight: 1, color: dashboard.kpis.deliveredShort > 0 ? 'var(--error)' : 'inherit' }}>{dashboard.kpis.deliveredShort}</div>
+              <div className="kpi-context" style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>affected patients</div>
             </Card>
-            <Card style={{ padding: '1rem', textAlign: 'center' }}>
-              <div className="kpi-value">{dashboard.kpis.reroutes}</div>
-              <div className="kpi-label">Reroutes</div>
+            <Card style={{ padding: '0.75rem 1rem', height: '100px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                <span style={{ fontSize: '1.2rem' }}>🔄</span>
+                <span className="kpi-label" style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Reroutes</span>
+              </div>
+              <div className="kpi-value" style={{ fontSize: '1.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{dashboard.kpis.reroutes}</div>
+              <div className="kpi-context" style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{dashboard.kpis.lastRerouteTime !== null ? `last: T+${time(dashboard.kpis.lastRerouteTime)}` : 'none'}</div>
             </Card>
           </div>
         )}
@@ -633,7 +657,7 @@ export const SimulationView: React.FC<{
         <div className="grid-12">
           {/* Map Column */}
           <div className="col-map">
-            <Card className="sim-map-col" style={{ padding: 0, overflow: 'hidden', position: 'relative', height: 'clamp(460px, 72vh, 700px)' }}>
+            <div className="card sim-map-col" style={{ padding: 0, overflow: 'hidden', position: 'relative', height: 'clamp(460px, 72vh, 700px)', display: 'flex', flexDirection: 'column' }}>
               <MapContainer
                 bounds={mapPoints.bounds || undefined}
                 center={!mapPoints.bounds && mapPoints.incident ? [mapPoints.incident.lat, mapPoints.incident.lng] : undefined}
@@ -682,7 +706,7 @@ export const SimulationView: React.FC<{
                   playingRef={playingRef} accRef={accRef} speedRef={speedRef} 
                 />
               </MapContainer>
-            </Card>
+            </div>
           </div>
 
           {/* Side Panel Column */}
@@ -690,24 +714,40 @@ export const SimulationView: React.FC<{
             <Card style={{ height: 'clamp(460px, 72vh, 700px)', padding: '1rem', display: 'flex', flexDirection: 'column' }} bodyClassName="sim-dash-col" >
               {/* Compact fleet strip */}
               {dashboard && (
-                <div style={{ display: 'flex', overflowX: 'auto', gap: '0.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1rem' }}>
-                  {dashboard.ambulances.map(a => (
-                    <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--bg-input)', padding: '0.4rem 0.75rem', borderRadius: '20px', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>
-                      <span style={{ fontSize: '1rem' }}>🚑</span>
-                      <strong>{a.label}</strong>
-                      <span style={{ color: 'var(--text-muted)' }}>{a.onboard}/{a.capacity}</span>
-                    </div>
-                  ))}
+                <div style={{ display: 'grid', gridTemplateColumns: dashboard.ambulances.length > 4 ? '1fr 1fr' : '1fr', gap: '0.25rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1rem', flexShrink: 0 }}>
+                  {dashboard.ambulances.map(a => {
+                    let text = 'idle';
+                    if (a.statusSentence.startsWith('en route to ')) {
+                      text = `→ ${a.statusSentence.replace('en route to ', '')}`;
+                      if (a.onboard > 0) text += ` · ${a.onboard}/${a.capacity}`;
+                    } else if (a.statusSentence.startsWith('delivering at ')) {
+                      text = `→ ${a.statusSentence.replace('delivering at ', '')}`;
+                    } else if (a.statusSentence.startsWith('stuck: ')) {
+                      text = `stuck — ${a.statusSentence.replace('stuck: ', '')}`;
+                    } else if (a.statusSentence === 'idle' && a.destinationName) {
+                      text = `idle at ${a.destinationName}`;
+                    } else {
+                      text = a.statusSentence;
+                    }
+                    return (
+                      <div key={a.id} title={`${a.label}: ${a.statusSentence}`} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.8rem', padding: '0.2rem 0' }}>
+                        <span>🚑</span>
+                        <strong style={{ flexShrink: 0 }}>{a.label}</strong>
+                        <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{text}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
               {/* Tabs */}
-              <div role="tablist" className="custom-tablist" aria-label="Simulation details">
+              <div role="tablist" className="custom-tablist" aria-label="Simulation details" style={{ flexShrink: 0 }}>
                 <button 
                   role="tab" 
                   className="custom-tab" 
                   aria-selected={tab === 'log'}
                   onClick={() => setTab('log')}
+                  style={{ whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}
                 >
                   Decision log
                 </button>
@@ -716,6 +756,7 @@ export const SimulationView: React.FC<{
                   className="custom-tab" 
                   aria-selected={tab === 'comparison'}
                   onClick={() => setTab('comparison')}
+                  style={{ whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}
                 >
                   Policy comparison
                 </button>
@@ -724,6 +765,7 @@ export const SimulationView: React.FC<{
                   className="custom-tab" 
                   aria-selected={tab === 'audit'}
                   onClick={() => setTab('audit')}
+                  style={{ whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}
                 >
                   Ledger tools
                 </button>
@@ -732,8 +774,8 @@ export const SimulationView: React.FC<{
               {/* Tab Content */}
               <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                 {tab === 'log' && (
-                  <>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.5rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.5rem', flexShrink: 0 }}>
                       <h3 style={{ fontSize: '1rem', margin: 0 }}>Decision Log</h3>
                       {dashboard && (
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
@@ -767,7 +809,7 @@ export const SimulationView: React.FC<{
                                 </span>
                               </div>
                             </div>
-                            <div style={{ color: 'var(--text-main)', lineHeight: 1.4 }}>
+                            <div style={{ color: 'var(--text-main)', lineHeight: 1.4, overflowWrap: 'anywhere' }}>
                               {describeEvent(evData, displayMaps)}
                             </div>
                           </div>
@@ -782,7 +824,7 @@ export const SimulationView: React.FC<{
                         </button>
                       )}
                     </div>
-                  </>
+                  </div>
                 )}
 
                 {tab === 'comparison' && (
@@ -800,43 +842,67 @@ export const SimulationView: React.FC<{
                     )}
                     {compareResult && (
                       <div>
-                        <h3 style={{ fontSize: '1.05rem', marginBottom: '0.75rem' }}>Policy Comparison</h3>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Differences reflect severity-first ordering and stock-aware hospital choice together.</p>
-                        <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse', textAlign: 'left' }}>
-                          <thead>
-                            <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
-                              <th style={{ padding: '0.75rem 0.5rem', color: 'var(--text-muted)' }}>Metric</th>
-                              <th style={{ padding: '0.75rem 0.5rem', color: 'var(--text-muted)' }}>Resource-aware</th>
-                              <th style={{ padding: '0.75rem 0.5rem', color: 'var(--text-muted)' }}>Baseline</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                              <td style={{ padding: '0.75rem 0.5rem' }}>Mean time to hospital, high-priority patients</td>
-                              <td style={{ padding: '0.75rem 0.5rem', fontVariantNumeric: 'tabular-nums' }}>{compareResult.resource_aware.meanHighPriorityDeliverySeconds !== null ? time(Math.round(compareResult.resource_aware.meanHighPriorityDeliverySeconds)) : 'N/A'}</td>
-                              <td style={{ padding: '0.75rem 0.5rem', fontVariantNumeric: 'tabular-nums' }}>{compareResult.baseline.meanHighPriorityDeliverySeconds !== null ? time(Math.round(compareResult.baseline.meanHighPriorityDeliverySeconds)) : 'N/A'}</td>
-                            </tr>
-                            <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                              <td style={{ padding: '0.75rem 0.5rem' }}>Patients delivered short of required stock</td>
-                              <td style={{ padding: '0.75rem 0.5rem', fontVariantNumeric: 'tabular-nums', color: compareResult.resource_aware.underResourcedCount === 0 ? 'var(--success)' : 'var(--error)' }}>
-                                {compareResult.resource_aware.underResourcedCount}
-                              </td>
-                              <td style={{ padding: '0.75rem 0.5rem', fontVariantNumeric: 'tabular-nums', color: compareResult.baseline.underResourcedCount === 0 ? 'var(--success)' : 'var(--error)' }}>
-                                {compareResult.baseline.underResourcedCount}
-                              </td>
-                            </tr>
-                            <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                              <td style={{ padding: '0.75rem 0.5rem' }}>Simulated elapsed</td>
-                              <td style={{ padding: '0.75rem 0.5rem', fontVariantNumeric: 'tabular-nums' }}>{time(compareResult.resource_aware.simulatedSeconds)}</td>
-                              <td style={{ padding: '0.75rem 0.5rem', fontVariantNumeric: 'tabular-nums' }}>{time(compareResult.baseline.simulatedSeconds)}</td>
-                            </tr>
-                            <tr>
-                              <td style={{ padding: '0.75rem 0.5rem' }}>Completed trips</td>
-                              <td style={{ padding: '0.75rem 0.5rem', fontVariantNumeric: 'tabular-nums' }}>{compareResult.resource_aware.completedTrips}</td>
-                              <td style={{ padding: '0.75rem 0.5rem', fontVariantNumeric: 'tabular-nums' }}>{compareResult.baseline.completedTrips}</td>
-                            </tr>
-                          </tbody>
-                        </table>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '1rem' }}>
+                          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>Differences reflect severity-first ordering and stock-aware choice.</p>
+                          <button onClick={() => setCompareResult(null)} className="btn btn-secondary" style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem', borderRadius: '4px' }}>Clear</button>
+                        </div>
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ width: '100%', minWidth: '350px', fontSize: '0.85rem', borderCollapse: 'collapse', textAlign: 'left' }}>
+                            <thead>
+                              <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
+                                <th style={{ padding: '0.75rem 0.5rem', color: 'var(--text-muted)' }}>Metric</th>
+                                <th style={{ padding: '0.75rem 0.5rem', color: 'var(--text-muted)', width: '35%' }}>Resource-aware</th>
+                                <th style={{ padding: '0.75rem 0.5rem', color: 'var(--text-muted)', width: '35%' }}>Baseline</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(() => {
+                                const renderRow = (label: string, valR: number | null, valB: number | null, fmt: (v: number) => string, invertGood = false) => {
+                                  if (valR === null || valB === null) return (
+                                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                      <td style={{ padding: '0.75rem 0.5rem' }}>{label}</td>
+                                      <td style={{ padding: '0.75rem 0.5rem' }}>N/A</td>
+                                      <td style={{ padding: '0.75rem 0.5rem' }}>N/A</td>
+                                    </tr>
+                                  );
+                                  const max = Math.max(valR, valB, 1);
+                                  const pctR = (valR / max) * 100;
+                                  const pctB = (valB / max) * 100;
+                                  const betterR = invertGood ? valR > valB : valR < valB;
+                                  const betterB = invertGood ? valB > valR : valB < valR;
+                                  return (
+                                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                      <td style={{ padding: '0.75rem 0.5rem' }}>{label}</td>
+                                      <td style={{ padding: '0.75rem 0.5rem', fontVariantNumeric: 'tabular-nums' }}>
+                                        <div style={{ marginBottom: '4px', color: betterR ? 'var(--success)' : (valR === valB ? 'inherit' : 'var(--warning)') }}>{fmt(valR)}</div>
+                                        <div style={{ height: '4px', background: 'var(--bg-card-border)', borderRadius: '2px', overflow: 'hidden' }}>
+                                          <div style={{ height: '100%', width: `${pctR}%`, background: 'currentColor' }}></div>
+                                        </div>
+                                      </td>
+                                      <td style={{ padding: '0.75rem 0.5rem', fontVariantNumeric: 'tabular-nums' }}>
+                                        <div style={{ marginBottom: '4px', color: betterB ? 'var(--success)' : (valR === valB ? 'inherit' : 'var(--warning)') }}>{fmt(valB)}</div>
+                                        <div style={{ height: '4px', background: 'var(--bg-card-border)', borderRadius: '2px', overflow: 'hidden' }}>
+                                          <div style={{ height: '100%', width: `${pctB}%`, background: 'currentColor' }}></div>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                };
+                                return (
+                                  <>
+                                    {renderRow('Mean time to hospital, high-priority', compareResult.resource_aware.meanHighPriorityDeliverySeconds, compareResult.baseline.meanHighPriorityDeliverySeconds, (v) => time(Math.round(v)))}
+                                    {renderRow('Patients delivered short of required stock', compareResult.resource_aware.underResourcedCount, compareResult.baseline.underResourcedCount, (v) => v.toString())}
+                                    {renderRow('Simulated elapsed', compareResult.resource_aware.simulatedSeconds, compareResult.baseline.simulatedSeconds, (v) => time(Math.round(v)))}
+                                    {renderRow('Completed trips', compareResult.resource_aware.completedTrips, compareResult.baseline.completedTrips, (v) => v.toString(), true)}
+                                  </>
+                                );
+                              })()}
+                            </tbody>
+                          </table>
+                        </div>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '1rem', fontStyle: 'italic' }}>
+                          One synthetic scenario on the Vile Parle graph. Not a general or clinical claim.
+                        </p>
                       </div>
                     )}
                   </div>
@@ -853,14 +919,19 @@ export const SimulationView: React.FC<{
                         </div>
                       </div>
 
-                      <div className="form-actions" style={{ flexWrap: 'wrap' }}>
-                        <button onClick={handleVerify} className="btn btn-primary" style={{ flex: 1 }}>Verify chain</button>
-                        <button onClick={handleExportLog} className="btn btn-secondary" style={{ flex: 1 }}>Export JSON</button>
-                        <label className="btn btn-secondary" style={{ flex: 1, textAlign: 'center', cursor: 'pointer', margin: 0 }}>
+                      <div className="form-actions" style={{ flexWrap: 'wrap', gap: '0.5rem', display: 'flex' }}>
+                        <button onClick={handleVerify} className="btn btn-primary" style={{ flex: '1 1 calc(50% - 0.25rem)' }}>Verify chain</button>
+                        <button onClick={() => { navigator.clipboard.writeText(headHash); alert('Hash copied'); }} className="btn btn-secondary" style={{ flex: '1 1 calc(50% - 0.25rem)' }}>Copy hash</button>
+                        <button onClick={handleExportLog} className="btn btn-secondary" style={{ flex: '1 1 calc(50% - 0.25rem)' }}>Export JSON</button>
+                        <label className="btn btn-secondary" style={{ flex: '1 1 calc(50% - 0.25rem)', textAlign: 'center', cursor: 'pointer', margin: 0 }}>
                           Verify file
                           <input type="file" accept=".json" onChange={handleVerifyExport} style={{ display: 'none' }} />
                         </label>
                       </div>
+
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
+                        A cryptographic chain ensures historical entries cannot be altered without changing the head hash.
+                      </p>
 
                       <label className="checkbox-label" style={{ marginTop: '0.5rem' }}>
                         <input type="checkbox" checked={showSnapshots} onChange={e => setShowSnapshots(e.target.checked)} />
@@ -893,7 +964,7 @@ export const SimulationView: React.FC<{
 
         {/* 4. Analytics row */}
         {dashboard && (
-          <div className="grid-12">
+          <div className="grid-12" style={{ alignItems: 'start' }}>
             {/* Hospital Inventory */}
             <div className="col-analytics">
               <Card style={{ height: '100%' }}>
@@ -901,40 +972,64 @@ export const SimulationView: React.FC<{
                   <h3 className="card-title">Hospital Inventory</h3>
                 </div>
                 <div className="card-body">
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                    {dashboard.hospitals.map(h => (
-                      <div key={h.id}>
-                        <div className="hospital-bar-header">
-                          <span className="hospital-bar-title">{h.name}</span>
-                          <span className="status-chip" style={{ 
-                            background: h.status === 'OK' ? 'rgba(16,185,129,0.15)' : h.status === 'LOW' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)',
-                            color: h.status === 'OK' ? '#34d399' : h.status === 'LOW' ? '#fbbf24' : '#f87171' 
-                          }}>
-                            {h.status}
-                          </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+                    {dashboard.hospitals.map(h => {
+                      const depleted = [];
+                      if (h.icu.remaining === 0 && h.icu.initial > 0) depleted.push('ICU');
+                      if (h.blood.remaining === 0 && h.blood.initial > 0) depleted.push('Blood');
+                      if (h.vent.remaining === 0 && h.vent.initial > 0) depleted.push('Vent');
+                      if (h.beds.remaining === 0 && h.beds.initial > 0) depleted.push('Beds');
+                      const summary = depleted.length > 0 ? `Depleted: ${depleted.join(', ')}` : 'All stocked';
+
+                      return (
+                        <div key={h.id} style={{ background: 'var(--bg-input)', padding: '0.75rem', borderRadius: '8px' }}>
+                          <div className="hospital-bar-header" style={{ marginBottom: '0.75rem' }}>
+                            <span className="hospital-bar-title">{h.name}</span>
+                            <span style={{ fontSize: '0.75rem', color: depleted.length > 0 ? 'var(--error)' : 'var(--success)' }}>
+                              {summary}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {[
+                              { key: 'ICU', r: h.icu },
+                              { key: 'Blood', r: h.blood },
+                              { key: 'Vent', r: h.vent },
+                              { key: 'Beds', r: h.beds }
+                            ].map(item => {
+                              const r = item.r;
+                              const pct = r.initial === 0 ? 0 : Math.max(0, Math.min(100, (r.remaining / r.initial) * 100));
+                              const statusChip = r.initial === 0 ? 'none' : r.remaining === 0 ? 'Depleted' : pct <= 25 ? 'Low' : 'OK';
+                              return (
+                                <div key={item.key} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem' }}>
+                                    <div style={{ width: '45px', color: 'var(--text-muted)' }}>{item.key}</div>
+                                    <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      {r.initial === 0 ? (
+                                        <span style={{ color: 'var(--text-dim)' }}>0 / 0</span>
+                                      ) : (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                          <span style={{ width: '40px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.remaining} / {r.initial}</span>
+                                          <span style={{ color: 'var(--text-dim)', fontSize: '0.65rem' }}>{r.reserved > 0 ? `res ${r.reserved}` : ''} {r.consumed > 0 ? `use ${r.consumed}` : ''}</span>
+                                        </div>
+                                      )}
+                                      <span style={{ 
+                                        fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)',
+                                        color: statusChip === 'OK' ? 'var(--success)' : statusChip === 'Low' ? 'var(--warning)' : statusChip === 'Depleted' ? 'var(--error)' : 'var(--text-dim)'
+                                      }}>
+                                        {statusChip}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="hospital-bar-track" style={{ background: 'rgba(255,255,255,0.05)', height: '4px', borderRadius: '2px', overflow: 'hidden' }}>
+                                    <div className="hospital-bar-fill" style={{ height: '100%', width: `${pct}%`, background: r.initial === 0 ? 'rgba(255,255,255,0.2)' : pct <= 25 ? 'var(--warning)' : 'var(--primary)', transition: 'width 0.3s ease' }} />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                        {[
-                          { key: 'ICU', r: h.icu },
-                          { key: 'Blood', r: h.blood },
-                          { key: 'Vent', r: h.vent },
-                          { key: 'Beds', r: h.beds }
-                        ].map(item => {
-                          const r = item.r;
-                          const pct = r.initial === 0 ? 0 : Math.max(0, Math.min(100, (r.remaining / r.initial) * 100));
-                          return (
-                            <div key={item.key} className="hospital-bar-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                              <div style={{ width: '45px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.key}</div>
-                              <div className="hospital-bar-track" style={{ flex: 1, background: 'rgba(255,255,255,0.05)' }}>
-                                <div className="hospital-bar-fill" style={{ width: `${pct}%`, background: pct === 0 && r.initial > 0 ? 'transparent' : pct <= 25 && r.initial > 0 ? 'var(--warning)' : 'var(--primary)' }} />
-                              </div>
-                              <div className="hospital-bar-stats" style={{ width: '45px', textAlign: 'right' }}>
-                                {r.remaining}/{r.initial}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </Card>
@@ -1023,7 +1118,7 @@ export const SimulationView: React.FC<{
 
         {/* 5. Ambulance cards row */}
         {dashboard && (
-          <div className="ambulance-grid" style={{ marginBottom: '1.5rem' }}>
+          <div className="ambulance-grid" style={{ marginBottom: '1.5rem', alignItems: 'start' }}>
             {dashboard.ambulances.map(a => (
               <Card key={a.id} style={{ padding: '1rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}>

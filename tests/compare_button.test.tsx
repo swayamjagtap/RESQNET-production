@@ -65,8 +65,8 @@ test('clicking Compare policies', async () => {
   console.log("Button clicked!");
   
   await waitFor(() => {
-    const isComparing = screen.queryByText('Comparing...');
-    const hasTable = screen.queryByText('Policy Comparison');
+    const isComparing = screen.queryByText(/Running baseline simulation/);
+    const hasTable = screen.queryByText(/Differences reflect severity/);
     
     if (isComparing) console.log("Still Comparing...");
     else if (hasTable) console.log("Has Table!");

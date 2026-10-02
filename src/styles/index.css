@@ -838,7 +838,7 @@ select.form-input {
 }
 
 /* Make sure the map never causes horizontal page overflow */
-.main-content { overflow-x: hidden; }
+.main-content { }
 
 /* Dashboard Card */
 .card-header {

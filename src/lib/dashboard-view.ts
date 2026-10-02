@@ -9,6 +9,7 @@ export interface DashboardKPIs {
   assigned: number;
   waiting: number;
   reroutes: number;
+  lastRerouteTime: number | null;
   roadsBlockedOrPartial: number;
   ledgerEntries: number;
 }
@@ -94,10 +95,12 @@ export function buildDashboardView(state: SimState | null, input: SimInput | nul
   }
 
   let reroutes = 0;
+  let lastRerouteTime: number | null = null;
   const edgeStates = new Map<string, number>();
   for (const ev of state.events) {
     if (ev.kind === 'reroute') {
       reroutes++;
+      lastRerouteTime = ev.simSeconds;
     } else if (ev.kind === 'road_change') {
       const details = ev as any;
       if (details.blockage !== undefined && details.edgeId) {
@@ -119,6 +122,7 @@ export function buildDashboardView(state: SimState | null, input: SimInput | nul
     assigned,
     waiting,
     reroutes,
+    lastRerouteTime,
     roadsBlockedOrPartial,
     ledgerEntries: state.events.length,
   };
