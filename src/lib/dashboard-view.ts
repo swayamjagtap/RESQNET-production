@@ -2,13 +2,15 @@ import type { SimState, SimInput, InjuryType, ResourceKey } from '../sim/types';
 
 export interface DashboardKPIs {
   simulatedTime: string; // mm:ss
+  totalPatients: number;
   delivered: number;
+  deliveredShort: number;
+  onboard: number;
+  assigned: number;
   waiting: number;
-  inTransit: number;
-  underResourcedArrivals: number;
   reroutes: number;
   roadsBlockedOrPartial: number;
-  ledgerEntries: number; // For simplicity, we can use state.events.length or similar if passed
+  ledgerEntries: number;
 }
 
 export interface DashboardHospitalResource {
@@ -43,10 +45,11 @@ export interface DashboardAmbulance {
 export interface DashboardPatientStats {
   type: InjuryType;
   total: number;
-  waiting: number;
-  inTransit: number;
-  delivered: number;
-  deliveredShort: number;
+  waiting: number;       // waiting for dispatch
+  assigned: number;      // reserved
+  onboard: number;       // loaded
+  delivered: number;     // delivered with full stock
+  deliveredShort: number;// delivered short of stock
 }
 
 export interface DashboardView {
@@ -65,17 +68,28 @@ function timeFmt(sec: number): string {
 export function buildDashboardView(state: SimState | null, input: SimInput | null): DashboardView | null {
   if (!state || !input) return null;
 
-  // KPIs
+  // KPIs & Patients Unified
   let waiting = 0;
-  let inTransit = 0;
+  let assigned = 0;
+  let onboard = 0;
   let delivered = 0;
+  let deliveredShort = 0;
+  let totalPatients = 0;
+
   for (const g of state.victimGroups) {
-    if (g.status === 'waiting' || g.status === 'reserved') {
+    totalPatients += g.count;
+    if (g.status === 'waiting') {
       waiting += g.count;
+    } else if (g.status === 'reserved') {
+      assigned += g.count;
     } else if (g.status === 'loaded') {
-      inTransit += g.count;
+      onboard += g.count;
     } else if (g.status === 'delivered') {
-      delivered += g.count;
+      if (g.underResourced) {
+        deliveredShort += g.count;
+      } else {
+        delivered += g.count;
+      }
     }
   }
 
@@ -98,13 +112,15 @@ export function buildDashboardView(state: SimState | null, input: SimInput | nul
 
   const kpis: DashboardKPIs = {
     simulatedTime: timeFmt(state.simSeconds),
+    totalPatients,
     delivered,
+    deliveredShort,
+    onboard,
+    assigned,
     waiting,
-    inTransit,
-    underResourcedArrivals: state.underResourcedCount,
     reroutes,
     roadsBlockedOrPartial,
-    ledgerEntries: state.events.length, // approximation without actual ledger feed
+    ledgerEntries: state.events.length,
   };
 
   // Hospitals
@@ -173,11 +189,10 @@ export function buildDashboardView(state: SimState | null, input: SimInput | nul
     };
   });
 
-  // Patients
   const pts = new Map<InjuryType, DashboardPatientStats>();
   const types: InjuryType[] = ['fracture', 'blood_loss', 'unconscious', 'limb_loss'];
   for (const t of types) {
-    pts.set(t, { type: t, total: 0, waiting: 0, inTransit: 0, delivered: 0, deliveredShort: 0 });
+    pts.set(t, { type: t, total: 0, waiting: 0, assigned: 0, onboard: 0, delivered: 0, deliveredShort: 0 });
   }
 
   for (const vg of input.victimGroups) {
@@ -187,11 +202,12 @@ export function buildDashboardView(state: SimState | null, input: SimInput | nul
 
   for (const vg of state.victimGroups) {
     const st = pts.get(vg.type)!;
-    if (vg.status === 'waiting' || vg.status === 'reserved') st.waiting += vg.count;
-    else if (vg.status === 'loaded') st.inTransit += vg.count;
+    if (vg.status === 'waiting') st.waiting += vg.count;
+    else if (vg.status === 'reserved') st.assigned += vg.count;
+    else if (vg.status === 'loaded') st.onboard += vg.count;
     else if (vg.status === 'delivered') {
-      st.delivered += vg.count;
       if (vg.underResourced) st.deliveredShort += vg.count;
+      else st.delivered += vg.count;
     }
   }
 

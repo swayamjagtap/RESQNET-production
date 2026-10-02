@@ -13,6 +13,8 @@ import { createLedger, verifyChain, failureReport, time, type Ledger, type Ledge
 import { drainEventsToLedger } from '../lib/ledger-feed';
 import { extractLiveView, type LiveView } from '../lib/live-view';
 import { buildDashboardView, groupCoLocatedAmbulances, type DashboardView } from '../lib/dashboard-view';
+import { Card } from '../components/Card';
+import { SvgStepChart } from '../components/SvgStepChart';
 
 const PLAYBACK_RATE_NORMAL = 20;
 
@@ -233,6 +235,7 @@ export const SimulationView: React.FC<{
   ambulances: Ambulance[];
 }> = ({ title, scenario, hospitals, ambulances }) => {
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<'log'|'comparison'|'audit'>('log');
   const [roadGraph, setRoadGraph] = useState<any>(null);
   const [simInput, setSimInput] = useState<any>(null);
 
@@ -447,11 +450,6 @@ export const SimulationView: React.FC<{
     URL.revokeObjectURL(url);
   };
 
-  const handleCopyHeadHash = () => {
-    if (ledgerRef.current) {
-      navigator.clipboard.writeText(ledgerRef.current.head());
-    }
-  };
 
   const handleVerifyExport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -551,519 +549,533 @@ export const SimulationView: React.FC<{
   const headHash = ledgerRef.current?.head() || '0'.repeat(64);
 
   return (
-    <div className="main-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', height: 'calc(100vh - 80px)' }}>
-      {/* ──── Header ──── */}
-      <header style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+    <div className="app-container">
+      {/* 1. Command bar */}
+      <header className="navbar" style={{ padding: '0.75rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ minWidth: 0 }}>
-          <h1 style={{ fontSize: '1.15rem', marginBottom: '0.15rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title} — Simulation</h1>
+          <h1 className="brand-title" style={{ fontSize: '1.2rem', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title} — Simulation</h1>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>
             OpenStreetMap roads · one-way tags ignored · speed assumed {AMBULANCE_SPEED_MPS} m/s
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
           {[0.1, 1, 4].map(s => (
             <button key={s} className="btn btn-secondary" onClick={() => setPlaybackSpeed(s)}
-              style={{ fontWeight: playbackSpeed === s ? 700 : 400, outline: playbackSpeed === s ? '2px solid var(--primary)' : 'none', outlineOffset: '1px', minWidth: '40px' }}>
+              style={{ padding: '0.4rem 0.8rem', fontWeight: playbackSpeed === s ? 700 : 400, borderColor: playbackSpeed === s ? 'var(--primary)' : 'var(--border-color)', minWidth: '40px' }}>
               {s}x
             </button>
           ))}
           <button className="btn btn-primary" onClick={() => setPlaying(!playing)} disabled={isResolved}
-            style={{ minWidth: '80px' }}>
+            style={{ minWidth: '100px' }}>
             {playLabel}
           </button>
           <button className="btn btn-secondary" onClick={handleReset}>Reset</button>
-          <button className="btn btn-secondary" onClick={handleCompare} disabled={comparing}>
+          <button className="btn btn-secondary" onClick={() => {
+            setTab('comparison');
+            handleCompare();
+          }} disabled={comparing}>
             {comparing ? 'Comparing...' : 'Compare policies'}
           </button>
           <button className="btn btn-secondary" onClick={() => setRefitCounter(c => c + 1)} title="Re-centre map">⊕</button>
         </div>
       </header>
 
-      {/* ──── Warnings ──── */}
-      {mapPoints.warnings.length > 0 && (
-        <div className="alert alert-warning" style={{ margin: 0, padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}>
-          ⚠️ {mapPoints.warnings.join(' ')}
-        </div>
-      )}
-      {simInput?.incidentSnap?.warning && (
-        <div className="alert alert-warning" style={{ margin: 0, padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}>
-          Incident snapped {simInput.incidentSnap.distanceMetres} m to nearest road (&gt;300 m).
-        </div>
-      )}
-      {liveView.ambulances.some(a => a.status === 'stuck') && (
-        <div className="alert alert-error" style={{ margin: 0, padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}>
-          ⚠️ Ambulance stuck: {state?.ambulances.find(a => a.status === 'stuck')?.stuckReason}
-        </div>
-      )}
+      <div className="main-content" style={{ maxWidth: '1440px', padding: '1.5rem' }}>
+        {/* Warnings */}
+        {mapPoints.warnings.length > 0 && (
+          <div className="alert alert-warning">
+            ⚠️ {mapPoints.warnings.join(' ')}
+          </div>
+        )}
+        {simInput?.incidentSnap?.warning && (
+          <div className="alert alert-warning">
+            Incident snapped {simInput.incidentSnap.distanceMetres} m to nearest road (&gt;300 m).
+          </div>
+        )}
+        {liveView.ambulances.some(a => a.status === 'stuck') && (
+          <div className="alert alert-error">
+            ⚠️ Ambulance stuck: {state?.ambulances.find(a => a.status === 'stuck')?.stuckReason}
+          </div>
+        )}
 
-      {/* ──── Main layout ──── */}
-      <style>{`
-        .sim-layout-grid {
-          --sim-h: clamp(460px, 72vh, 700px);
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) 380px;
-          align-items: start;
-          gap: 20px;
-        }
-        .sim-map-col {
-          height: var(--sim-h);
-          width: 100%;
-        }
-        .sim-dash-col {
-          height: var(--sim-h);
-          display: flex;
-          flex-direction: column;
-          min-height: 0;
-          overflow: hidden;
-        }
-        .sim-dash-log {
-          flex: 1;
-          min-height: 0;
-          overflow-y: auto;
-        }
-        @media (max-width: 980px) {
-          .sim-layout-grid {
-            grid-template-columns: 1fr;
-          }
-          .sim-map-col {
-            height: clamp(320px, 55vh, 480px);
-          }
-          .sim-dash-col {
-            height: auto;
-          }
-          .sim-dash-log {
-            max-height: 360px;
-          }
-        }
-        
-        /* Dashboard Cards CSS */
-        .kpi-tile {
-          text-align: center;
-          padding: 6px;
-          background: rgba(0,0,0,0.02);
-          border-radius: 6px;
-          border: 1px solid rgba(0,0,0,0.05);
-        }
-        .kpi-val {
-          font-size: 1.1rem;
-          font-weight: 700;
-          font-variant-numeric: tabular-nums;
-        }
-        .kpi-lbl {
-          font-size: 0.65rem;
-          color: var(--text-muted);
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          margin-top: 2px;
-        }
-        .dash-row {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-          gap: 16px;
-          margin-top: 20px;
-        }
-        .inv-bar-wrap {
-          display: flex;
-          align-items: center;
-          margin-bottom: 8px;
-        }
-        .inv-bar-lbl {
-          width: 50px;
-          font-size: 0.75rem;
-          font-weight: 600;
-          color: var(--text-dim);
-        }
-        .inv-bar-track {
-          flex: 1;
-          height: 6px;
-          background: #e2e8f0;
-          border-radius: 3px;
-          margin: 0 10px;
-          position: relative;
-          overflow: hidden;
-        }
-        .inv-bar-fill {
-          height: 100%;
-          background: var(--primary);
-          transition: width 0.3s ease;
-        }
-        .inv-bar-fill.low { background: #f59e0b; }
-        .inv-bar-fill.empty { background: #ef4444; }
-        .inv-bar-val {
-          width: 40px;
-          font-size: 0.75rem;
-          text-align: right;
-          font-variant-numeric: tabular-nums;
-        }
-        .inv-reserved {
-          font-size: 0.65rem;
-          color: #d97706;
-          margin-left: 6px;
-          background: #fef3c7;
-          padding: 1px 4px;
-          border-radius: 4px;
-        }
-      `}</style>
-      <div className="sim-layout-grid">
+        {/* 2. KPI strip */}
+        {dashboard && (
+          <div className="kpi-strip">
+            <Card style={{ padding: '1rem', textAlign: 'center' }}>
+              <div className="kpi-value">{dashboard.kpis.simulatedTime}</div>
+              <div className="kpi-label">Simulated Time</div>
+            </Card>
+            <Card style={{ padding: '1rem', textAlign: 'center' }}>
+              <div className="kpi-value">{dashboard.kpis.delivered} <span style={{fontSize:'1rem', color:'var(--text-muted)'}}>/ {dashboard.kpis.totalPatients}</span></div>
+              <div className="kpi-label">Delivered</div>
+            </Card>
+            <Card style={{ padding: '1rem', textAlign: 'center' }}>
+              <div className="kpi-value">{dashboard.kpis.onboard}</div>
+              <div className="kpi-label">In Transit</div>
+            </Card>
+            <Card style={{ padding: '1rem', textAlign: 'center' }}>
+              <div className="kpi-value">{dashboard.kpis.waiting}</div>
+              <div className="kpi-label">Waiting</div>
+              <div className="kpi-context">({dashboard.kpis.assigned} assigned)</div>
+            </Card>
+            <Card style={{ padding: '1rem', textAlign: 'center' }}>
+              <div className="kpi-value" style={{ color: dashboard.kpis.deliveredShort > 0 ? 'var(--error)' : 'inherit' }}>{dashboard.kpis.deliveredShort}</div>
+              <div className="kpi-label">Stock Shortfalls</div>
+            </Card>
+            <Card style={{ padding: '1rem', textAlign: 'center' }}>
+              <div className="kpi-value">{dashboard.kpis.reroutes}</div>
+              <div className="kpi-label">Reroutes</div>
+            </Card>
+          </div>
+        )}
 
-        {/* ──── Map Column ──── */}
-        <div className="sim-map-col card" style={{ padding: 0, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-          {/* KPI Strip */}
-          {dashboard && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(60px, 1fr))', gap: '8px', padding: '10px', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-color)', zIndex: 10 }}>
-              <div className="kpi-tile">
-                <div className="kpi-val">{dashboard.kpis.simulatedTime}</div>
-                <div className="kpi-lbl">Time</div>
-              </div>
-              <div className="kpi-tile">
-                <div className="kpi-val">{dashboard.kpis.delivered} / {state?.totalPatients || 0}</div>
-                <div className="kpi-lbl">Delivered</div>
-              </div>
-              <div className="kpi-tile">
-                <div className="kpi-val">{dashboard.kpis.inTransit}</div>
-                <div className="kpi-lbl">In Transit</div>
-              </div>
-              <div className="kpi-tile">
-                <div className="kpi-val">{dashboard.kpis.waiting}</div>
-                <div className="kpi-lbl">Waiting</div>
-              </div>
-              <div className="kpi-tile" style={{ color: dashboard.kpis.underResourcedArrivals > 0 ? 'var(--error)' : 'inherit' }}>
-                <div className="kpi-val">{dashboard.kpis.underResourcedArrivals}</div>
-                <div className="kpi-lbl">Shortfall</div>
-              </div>
-              <div className="kpi-tile">
-                <div className="kpi-val">{dashboard.kpis.reroutes}</div>
-                <div className="kpi-lbl">Reroutes</div>
-              </div>
-            </div>
-          )}
-          
-          <div style={{ flex: 1, position: 'relative' }}>
-            <MapContainer
-              bounds={mapPoints.bounds || undefined}
-              center={!mapPoints.bounds && mapPoints.incident ? [mapPoints.incident.lat, mapPoints.incident.lng] : undefined}
-              zoom={!mapPoints.bounds ? 14 : undefined}
-              style={{ width: '100%', height: '100%', background: '#e8e8e8' }}
-              zoomAnimation={true}
-            >
-              <TileLayer
-                url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              />
+        {/* 3. Main row */}
+        <div className="grid-12">
+          {/* Map Column */}
+          <div className="col-map">
+            <Card className="sim-map-col" style={{ padding: 0, overflow: 'hidden', position: 'relative', height: 'clamp(460px, 72vh, 700px)' }}>
+              <MapContainer
+                bounds={mapPoints.bounds || undefined}
+                center={!mapPoints.bounds && mapPoints.incident ? [mapPoints.incident.lat, mapPoints.incident.lng] : undefined}
+                zoom={!mapPoints.bounds ? 14 : undefined}
+                style={{ width: '100%', height: '100%', background: '#e8e8e8' }}
+                zoomAnimation={true}
+              >
+                <TileLayer
+                  url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                />
+                {roadGraph && engine && <RoadLayer graph={roadGraph} engine={engine} />}
+                <MapRefit bounds={mapPoints.bounds} trigger={refitCounter} />
 
-              {roadGraph && engine && <RoadLayer graph={roadGraph} engine={engine} />}
-              <MapRefit bounds={mapPoints.bounds} trigger={refitCounter} />
+                {mapPoints.activeRoutes.map(route => (
+                  <Polyline key={route.id} positions={route.positions} pathOptions={{ color: '#3b82f6', weight: 3, opacity: 0.8 }} />
+                ))}
 
-              {/* Active routes */}
-              {mapPoints.activeRoutes.map(route => (
-                <Polyline key={route.id} positions={route.positions}
-                  pathOptions={{ color: '#3b82f6', weight: 3, opacity: 0.8 }} />
-              ))}
+                {mapPoints.incident && (
+                  <Marker position={[mapPoints.incident.lat, mapPoints.incident.lng]} icon={getIncidentIcon()} />
+                )}
 
-              {/* Incident */}
-              {mapPoints.incident && (
-                <Marker position={[mapPoints.incident.lat, mapPoints.incident.lng]} icon={getIncidentIcon()} />
+                {mapPoints.hospitals.map(h => {
+                  const dh = dashboard?.hospitals.find(d => d.id === h.id);
+                  return (
+                    <Marker key={h.id} position={[h.point.lat, h.point.lng]} icon={getHospitalIcon()}>
+                      <Tooltip direction="top" offset={[0, -5]} opacity={1}>
+                        <div style={{ fontSize: '0.75rem', lineHeight: '1.2' }}>
+                          <strong style={{ display: 'block', marginBottom: '2px' }}>{h.name}</strong>
+                          {dh ? (
+                            <>
+                              <div>ICU: {dh.icu.remaining}</div>
+                              <div>Blood: {dh.blood.remaining}</div>
+                              <div>Vent: {dh.vent.remaining}</div>
+                              <div>Beds: {dh.beds.remaining}</div>
+                            </>
+                          ) : 'Loading...'}
+                        </div>
+                      </Tooltip>
+                    </Marker>
+                  );
+                })}
+
+                <AmbulanceLayer 
+                  simInput={simInput} stateRef={stateRef} roadGraph={roadGraph} 
+                  playingRef={playingRef} accRef={accRef} speedRef={speedRef} 
+                />
+              </MapContainer>
+            </Card>
+          </div>
+
+          {/* Side Panel Column */}
+          <div className="col-side">
+            <Card style={{ height: 'clamp(460px, 72vh, 700px)', padding: '1rem', display: 'flex', flexDirection: 'column' }} bodyClassName="sim-dash-col" >
+              {/* Compact fleet strip */}
+              {dashboard && (
+                <div style={{ display: 'flex', overflowX: 'auto', gap: '0.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1rem' }}>
+                  {dashboard.ambulances.map(a => (
+                    <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--bg-input)', padding: '0.4rem 0.75rem', borderRadius: '20px', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>
+                      <span style={{ fontSize: '1rem' }}>🚑</span>
+                      <strong>{a.label}</strong>
+                      <span style={{ color: 'var(--text-muted)' }}>{a.onboard}/{a.capacity}</span>
+                    </div>
+                  ))}
+                </div>
               )}
 
-              {/* Hospitals */}
-              {mapPoints.hospitals.map(h => {
-                const dh = dashboard?.hospitals.find(d => d.id === h.id);
-                return (
-                  <Marker key={h.id} position={[h.point.lat, h.point.lng]} icon={getHospitalIcon()}>
-                    <Tooltip direction="top" offset={[0, -5]} opacity={1}>
-                      <div style={{ fontSize: '0.75rem', lineHeight: '1.2' }}>
-                        <strong style={{ display: 'block', marginBottom: '2px' }}>{h.name}</strong>
-                        {dh ? (
-                          <>
-                            <div>ICU: {dh.icu.remaining}</div>
-                            <div>Blood: {dh.blood.remaining}</div>
-                            <div>Vent: {dh.vent.remaining}</div>
-                            <div>Beds: {dh.beds.remaining}</div>
-                          </>
-                        ) : 'Loading...'}
-                      </div>
-                    </Tooltip>
-                  </Marker>
-                );
-              })}
+              {/* Tabs */}
+              <div role="tablist" className="custom-tablist" aria-label="Simulation details">
+                <button 
+                  role="tab" 
+                  className="custom-tab" 
+                  aria-selected={tab === 'log'}
+                  onClick={() => setTab('log')}
+                >
+                  Decision log
+                </button>
+                <button 
+                  role="tab" 
+                  className="custom-tab" 
+                  aria-selected={tab === 'comparison'}
+                  onClick={() => setTab('comparison')}
+                >
+                  Policy comparison
+                </button>
+                <button 
+                  role="tab" 
+                  className="custom-tab" 
+                  aria-selected={tab === 'audit'}
+                  onClick={() => setTab('audit')}
+                >
+                  Ledger tools
+                </button>
+              </div>
 
-              {/* Ambulances rendered imperatively via component */}
-              <AmbulanceLayer 
-                simInput={simInput} stateRef={stateRef} roadGraph={roadGraph} 
-                playingRef={playingRef} accRef={accRef} speedRef={speedRef} 
-              />
-            </MapContainer>
+              {/* Tab Content */}
+              <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                {tab === 'log' && (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.5rem' }}>
+                      <h3 style={{ fontSize: '1rem', margin: 0 }}>Decision Log</h3>
+                      {dashboard && (
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          {dashboard.kpis.delivered} delivered · {dashboard.kpis.waiting} waiting
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div
+                      ref={logContainerRef}
+                      onScroll={handleLogScroll}
+                      style={{ flex: 1, overflowY: 'auto', background: 'var(--bg-input)', borderRadius: '8px', padding: '0.5rem', fontSize: '0.85rem' }}
+                      aria-live="polite"
+                    >
+                      {displayEntries.map(e => {
+                        const evData = e.data.details || e.data;
+                        if (evData.kind === 'road_change' && evData.simSeconds === 0) {
+                          const edgeId = evData.edgeId ?? e.data.text;
+                          if (preStartRoadChangeSeen.has(edgeId)) return null;
+                          preStartRoadChangeSeen.add(edgeId);
+                        }
+                        return (
+                          <div key={e.hash} style={{ marginBottom: '0.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.25rem' }}>
+                              <div>
+                                <span style={{ color: 'var(--text-dim)', marginRight: '0.5rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                  T+{e.data.simTime || time(e.data.simSeconds || 0)}
+                                </span>
+                                <span className="badge" style={{ background: 'rgba(56, 189, 248, 0.1)', color: 'var(--primary)' }}>
+                                  {e.data.kind}
+                                </span>
+                              </div>
+                            </div>
+                            <div style={{ color: 'var(--text-main)', lineHeight: 1.4 }}>
+                              {describeEvent(evData, displayMaps)}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {!autoScrollLog && (
+                        <button
+                          onClick={() => setAutoScrollLog(true)}
+                          style={{ position: 'sticky', bottom: '10px', left: '50%', transform: 'translateX(-50%)', background: 'var(--primary)', color: '#000', border: 'none', padding: '4px 12px', borderRadius: '16px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}
+                        >
+                          Jump to latest
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {tab === 'comparison' && (
+                  <div style={{ flex: 1, overflowY: 'auto' }}>
+                    {!compareResult && !comparing && (
+                      <div className="empty-state">
+                        Click "Compare policies" in the command bar to run a headless baseline comparison.
+                      </div>
+                    )}
+                    {comparing && (
+                      <div className="spinner-center">
+                        <div className="spinner spinner-lg"></div>
+                        <p style={{ marginTop: '1rem', color: 'var(--text-muted)' }}>Running baseline simulation...</p>
+                      </div>
+                    )}
+                    {compareResult && (
+                      <div>
+                        <h3 style={{ fontSize: '1.05rem', marginBottom: '0.75rem' }}>Policy Comparison</h3>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Differences reflect severity-first ordering and stock-aware hospital choice together.</p>
+                        <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse', textAlign: 'left' }}>
+                          <thead>
+                            <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
+                              <th style={{ padding: '0.75rem 0.5rem', color: 'var(--text-muted)' }}>Metric</th>
+                              <th style={{ padding: '0.75rem 0.5rem', color: 'var(--text-muted)' }}>Resource-aware</th>
+                              <th style={{ padding: '0.75rem 0.5rem', color: 'var(--text-muted)' }}>Baseline</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                              <td style={{ padding: '0.75rem 0.5rem' }}>Mean time to hospital, high-priority patients</td>
+                              <td style={{ padding: '0.75rem 0.5rem', fontVariantNumeric: 'tabular-nums' }}>{compareResult.resource_aware.meanHighPriorityDeliverySeconds !== null ? time(Math.round(compareResult.resource_aware.meanHighPriorityDeliverySeconds)) : 'N/A'}</td>
+                              <td style={{ padding: '0.75rem 0.5rem', fontVariantNumeric: 'tabular-nums' }}>{compareResult.baseline.meanHighPriorityDeliverySeconds !== null ? time(Math.round(compareResult.baseline.meanHighPriorityDeliverySeconds)) : 'N/A'}</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                              <td style={{ padding: '0.75rem 0.5rem' }}>Patients delivered short of required stock</td>
+                              <td style={{ padding: '0.75rem 0.5rem', fontVariantNumeric: 'tabular-nums', color: compareResult.resource_aware.underResourcedCount === 0 ? 'var(--success)' : 'var(--error)' }}>
+                                {compareResult.resource_aware.underResourcedCount}
+                              </td>
+                              <td style={{ padding: '0.75rem 0.5rem', fontVariantNumeric: 'tabular-nums', color: compareResult.baseline.underResourcedCount === 0 ? 'var(--success)' : 'var(--error)' }}>
+                                {compareResult.baseline.underResourcedCount}
+                              </td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                              <td style={{ padding: '0.75rem 0.5rem' }}>Simulated elapsed</td>
+                              <td style={{ padding: '0.75rem 0.5rem', fontVariantNumeric: 'tabular-nums' }}>{time(compareResult.resource_aware.simulatedSeconds)}</td>
+                              <td style={{ padding: '0.75rem 0.5rem', fontVariantNumeric: 'tabular-nums' }}>{time(compareResult.baseline.simulatedSeconds)}</td>
+                            </tr>
+                            <tr>
+                              <td style={{ padding: '0.75rem 0.5rem' }}>Completed trips</td>
+                              <td style={{ padding: '0.75rem 0.5rem', fontVariantNumeric: 'tabular-nums' }}>{compareResult.resource_aware.completedTrips}</td>
+                              <td style={{ padding: '0.75rem 0.5rem', fontVariantNumeric: 'tabular-nums' }}>{compareResult.baseline.completedTrips}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {tab === 'audit' && (
+                  <div style={{ flex: 1, overflowY: 'auto' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <div className="card" style={{ padding: '1rem', background: 'var(--bg-input)' }}>
+                        <h4 style={{ margin: '0 0 0.5rem 0' }}>Log State</h4>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                          <div>{ledgerEntries.length} entries stored</div>
+                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', marginTop: '0.5rem', wordBreak: 'break-all' }}>Head: {headHash}</div>
+                        </div>
+                      </div>
+
+                      <div className="form-actions" style={{ flexWrap: 'wrap' }}>
+                        <button onClick={handleVerify} className="btn btn-primary" style={{ flex: 1 }}>Verify chain</button>
+                        <button onClick={handleExportLog} className="btn btn-secondary" style={{ flex: 1 }}>Export JSON</button>
+                        <label className="btn btn-secondary" style={{ flex: 1, textAlign: 'center', cursor: 'pointer', margin: 0 }}>
+                          Verify file
+                          <input type="file" accept=".json" onChange={handleVerifyExport} style={{ display: 'none' }} />
+                        </label>
+                      </div>
+
+                      <label className="checkbox-label" style={{ marginTop: '0.5rem' }}>
+                        <input type="checkbox" checked={showSnapshots} onChange={e => setShowSnapshots(e.target.checked)} />
+                        Include minute snapshots in log
+                      </label>
+
+                      {isDemoMode && (
+                        <div style={{ marginTop: '1rem', padding: '1rem', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px' }}>
+                          <h4 style={{ color: 'var(--error)', margin: '0 0 0.5rem 0' }}>Demo Tools</h4>
+                          <button onClick={handleCorruptDemo} className="btn btn-danger" style={{ width: '100%' }}>
+                            Simulate tampering (Corrupt entry 2)
+                          </button>
+                        </div>
+                      )}
+
+                      {verifyResult && (
+                        <div className={`alert ${verifyResult.ok ? 'alert-success' : 'alert-error'}`} style={{ marginTop: '1rem', wordBreak: 'break-all' }}>
+                          {verifyResult.ok 
+                            ? ((verifyResult as any).verifiedCount !== ledgerEntries.length ? `Verified ${(verifyResult as any).verifiedCount} of ${ledgerEntries.length} entries. Verify again.` : `✓ ${verifyResult.count} entries verified, chain intact`) 
+                            : failureReport(verifyResult)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
           </div>
         </div>
 
-        {/* ──── Dashboard ──── */}
-        <div className="sim-dash-col card" style={{ padding: '0.75rem' }}>
-
-            {/* Counters + Log header */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.25rem', marginBottom: '0.3rem', flexShrink: 0 }}>
-              <h3 style={{ fontSize: '0.95rem', margin: 0 }}>Decision Log</h3>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                {time(liveView.simSeconds)} · {liveView.deliveredCount} delivered · {liveView.waiting} waiting
-              </span>
-            </div>
-            
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.3rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-              <span>{ledgerEntries.length} entries · head {headHash.slice(0, 8)}…</span>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '0.3rem', flexShrink: 0 }}>
-              <button onClick={handleVerify} className="btn btn-secondary" style={{ padding: '2px 6px', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>Verify</button>
-              <button onClick={handleCopyHeadHash} className="btn btn-secondary" style={{ padding: '2px 6px', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>Copy hash</button>
-              <button onClick={handleExportLog} className="btn btn-secondary" style={{ padding: '2px 6px', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>Export JSON</button>
-              <label className="btn btn-secondary" style={{ padding: '2px 6px', fontSize: '0.7rem', cursor: 'pointer', margin: 0, whiteSpace: 'nowrap' }}>
-                Verify file
-                <input type="file" accept=".json" onChange={handleVerifyExport} style={{ display: 'none' }} />
-              </label>
-            </div>
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem', flexWrap: 'wrap', gap: '4px', flexShrink: 0 }}>
-              <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
-                <input type="checkbox" checked={showSnapshots} onChange={e => setShowSnapshots(e.target.checked)} style={{ width: '12px', height: '12px' }} />
-                Show minute snapshots
-              </label>
-              
-              {isDemoMode && (
-                <button onClick={handleCorruptDemo} style={{ fontSize: '0.7rem', background: '#fecaca', color: '#991b1b', border: '1px solid #f87171', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer' }}>
-                  Corrupt entry 2
-                </button>
-              )}
-            </div>
-            
-            {verifyResult && (
-              <pre style={{ margin: '0 0 0.5rem 0', padding: '0.4rem', background: verifyResult.ok ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: verifyResult.ok ? 'var(--success)' : 'var(--error)', border: `1px solid ${verifyResult.ok ? 'var(--success)' : 'var(--error)'}`, borderRadius: '4px', fontSize: '0.7rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                {verifyResult.ok ? ((verifyResult as any).verifiedCount !== ledgerEntries.length ? `Verified ${(verifyResult as any).verifiedCount} of ${ledgerEntries.length} entries. Verify again.` : `✓ ${verifyResult.count} entries verified, chain intact`) : failureReport(verifyResult)}
-              </pre>
-            )}
-
-            {/* Event log */}
-            <div
-              ref={logContainerRef}
-              onScroll={handleLogScroll}
-              className="sim-dash-log"
-              style={{ background: 'var(--bg-elevated)', borderRadius: '4px', padding: '0.4rem', fontSize: '0.78rem', position: 'relative' }}
-            >
-              {displayEntries.map(e => {
-                const evData = e.data.details || e.data;
-                // Deduplicate pre-start road changes
-                if (evData.kind === 'road_change' && evData.simSeconds === 0) {
-                  const edgeId = evData.edgeId ?? e.data.text;
-                  if (preStartRoadChangeSeen.has(edgeId)) return null;
-                  preStartRoadChangeSeen.add(edgeId);
-                }
-                return (
-                  <div key={e.hash} style={{ marginBottom: '0.4rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.3rem', lineHeight: 1.3 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.15rem' }}>
-                      <div>
-                        <span style={{ color: 'var(--text-dim)', marginRight: '0.4rem', fontWeight: 600 }}>T+{e.data.simTime || time(e.data.simSeconds || 0)}</span>
-                        <span style={{ 
-                          fontWeight: 600, 
-                          color: 'var(--primary)', 
-                          fontSize: '0.65rem',
-                          background: 'rgba(59, 130, 246, 0.1)',
-                          padding: '1px 4px',
-                          borderRadius: '4px'
-                        }}>
-                          {e.data.kind.toUpperCase()}
-                        </span>
+        {/* 4. Analytics row */}
+        {dashboard && (
+          <div className="grid-12">
+            {/* Hospital Inventory */}
+            <div className="col-analytics">
+              <Card style={{ height: '100%' }}>
+                <div className="card-header">
+                  <h3 className="card-title">Hospital Inventory</h3>
+                </div>
+                <div className="card-body">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    {dashboard.hospitals.map(h => (
+                      <div key={h.id}>
+                        <div className="hospital-bar-header">
+                          <span className="hospital-bar-title">{h.name}</span>
+                          <span className="status-chip" style={{ 
+                            background: h.status === 'OK' ? 'rgba(16,185,129,0.15)' : h.status === 'LOW' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)',
+                            color: h.status === 'OK' ? '#34d399' : h.status === 'LOW' ? '#fbbf24' : '#f87171' 
+                          }}>
+                            {h.status}
+                          </span>
+                        </div>
+                        {[
+                          { key: 'ICU', r: h.icu },
+                          { key: 'Blood', r: h.blood },
+                          { key: 'Vent', r: h.vent },
+                          { key: 'Beds', r: h.beds }
+                        ].map(item => {
+                          const r = item.r;
+                          const pct = r.initial === 0 ? 0 : Math.max(0, Math.min(100, (r.remaining / r.initial) * 100));
+                          return (
+                            <div key={item.key} className="hospital-bar-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <div style={{ width: '45px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.key}</div>
+                              <div className="hospital-bar-track" style={{ flex: 1, background: 'rgba(255,255,255,0.05)' }}>
+                                <div className="hospital-bar-fill" style={{ width: `${pct}%`, background: pct === 0 && r.initial > 0 ? 'transparent' : pct <= 25 && r.initial > 0 ? 'var(--warning)' : 'var(--primary)' }} />
+                              </div>
+                              <div className="hospital-bar-stats" style={{ width: '45px', textAlign: 'right' }}>
+                                {r.remaining}/{r.initial}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--text-dim)' }}>
-                        #{e.data.id} · {e.hash.slice(0, 8)}
-                      </div>
-                    </div>
-                    <div style={{ paddingLeft: '0.2rem' }}>
-                      {describeEvent(evData, displayMaps)}
-                    </div>
+                    ))}
                   </div>
-                );
-              })}
-              <div style={{ paddingBottom: '30px' }} />
-              {!autoScrollLog && (
-                <button
-                  onClick={() => setAutoScrollLog(true)}
-                  style={{ position: 'sticky', bottom: '6px', left: '50%', transform: 'translateX(-50%)', background: 'var(--primary)', color: 'white', border: 'none', padding: '3px 8px', borderRadius: '12px', fontSize: '0.7rem', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.4)', zIndex: 10 }}
-                >
-                  Jump to latest
-                </button>
-              )}
+                </div>
+              </Card>
             </div>
-            
-            <details style={{ fontSize: '0.65rem', color: 'var(--text-dim)', marginTop: '0.3rem', flexShrink: 0 }}>
-              <summary style={{ cursor: 'pointer', outline: 'none' }}>Tamper-evident, not tamper-proof. What does this mean?</summary>
-              <div style={{ marginTop: '0.3rem', paddingLeft: '0.8rem', borderLeft: '2px solid var(--border-color)' }}>
-                Each entry's hash includes the previous entry's hash, so editing an old entry breaks every later link and Verify log reports the first broken entry. The chain is stored in this browser with no outside witness: someone who can rewrite the whole chain can recompute every hash. It is not immutable and not a blockchain.
-              </div>
-            </details>
-        </div>
-      </div>
 
-      {/* Map Legend (Below Grid) */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', padding: '0 4px', fontSize: '0.75rem', color: 'var(--text-main)', marginTop: '0.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '14px', background: 'white', border: '2px solid #16a34a', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a', fontSize: '9px', fontWeight: 'bold' }}>H</div> Scenario hospital</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '14px', background: '#ef4444', border: '1px solid white', borderRadius: '50%' }}></div> Incident</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '8px', background: 'white', border: '1px solid black', borderRadius: '2px' }}></div> Ambulance</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '16px', height: '3px', background: '#dc2626', borderTop: '1px dashed white' }}></div> Blocked road</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '16px', height: '3px', background: '#d97706' }}></div> Partial road</div>
-        <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginLeft: 'auto' }}>Red crosses on the basemap are OpenStreetMap places, not scenario hospitals.</div>
-      </div>
-
-      {dashboard && (
-        <div className="dash-row">
-          {/* Hospital Inventory */}
-          <div className="card" style={{ gridColumn: '1 / -1', padding: '12px' }}>
-            <h3 style={{ fontSize: '0.95rem', marginBottom: '10px' }}>Hospital Inventory</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
-              {dashboard.hospitals.map(h => (
-                <div key={h.id} style={{ padding: '10px', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <strong style={{ fontSize: '0.85rem' }}>{h.name}</strong>
-                    <span style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', background: h.status === 'OK' ? '#dcfce7' : h.status === 'LOW' ? '#fef08a' : '#fee2e2', color: h.status === 'OK' ? '#166534' : h.status === 'LOW' ? '#854d0e' : '#991b1b' }}>
-                      {h.status}
+            {/* Patients by Injury */}
+            <div className="col-analytics">
+              <Card style={{ height: '100%' }}>
+                <div className="card-header">
+                  <div className="card-title-area">
+                    <h3 className="card-title">Patients by Injury</h3>
+                    <span className="card-info-icon" title="Pipeline: Waiting for dispatch -> Assigned -> On board -> Delivered (or Delivered short of stock)">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
                     </span>
                   </div>
-                  {[
-                    { lbl: 'ICU', r: h.icu },
-                    { lbl: 'Blood', r: h.blood },
-                    { lbl: 'Vent', r: h.vent },
-                    { lbl: 'Beds', r: h.beds }
-                  ].map(item => {
-                    const r = item.r;
-                    if (r.initial === 0) return null;
-                    const pct = Math.max(0, Math.min(100, (r.remaining / r.initial) * 100));
-                    const cls = pct === 0 ? 'empty' : pct <= 25 ? 'low' : '';
-                    return (
-                      <div key={item.lbl} className="inv-bar-wrap">
-                        <div className="inv-bar-lbl">{item.lbl}</div>
-                        <div className="inv-bar-track">
-                          <div className={`inv-bar-fill ${cls}`} style={{ width: `${pct}%` }} />
+                </div>
+                <div className="card-body">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    {dashboard.patients.map(p => {
+                      if (p.total === 0) return null;
+                      return (
+                        <div key={p.type}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.85rem' }}>
+                            <strong style={{ textTransform: 'capitalize' }}>{p.type.replace('_', ' ')}</strong>
+                            <span style={{ color: 'var(--text-muted)' }}>{p.total} total</span>
+                          </div>
+                          
+                          <div className="pipeline-bar-wrapper">
+                            {p.delivered > 0 && <div className="pipeline-segment" style={{ width: `${(p.delivered / p.total)*100}%`, background: 'var(--success)' }} title={`Delivered: ${p.delivered}`}>{p.delivered > p.total * 0.1 ? p.delivered : ''}</div>}
+                            {p.deliveredShort > 0 && <div className="pipeline-segment" style={{ width: `${(p.deliveredShort / p.total)*100}%`, background: 'var(--error)' }} title={`Delivered short: ${p.deliveredShort}`}>{p.deliveredShort > p.total * 0.1 ? p.deliveredShort : ''}</div>}
+                            {p.onboard > 0 && <div className="pipeline-segment" style={{ width: `${(p.onboard / p.total)*100}%`, background: 'var(--primary)' }} title={`On board: ${p.onboard}`}>{p.onboard > p.total * 0.1 ? p.onboard : ''}</div>}
+                            {p.assigned > 0 && <div className="pipeline-segment" style={{ width: `${(p.assigned / p.total)*100}%`, background: '#8b5cf6' }} title={`Assigned: ${p.assigned}`}>{p.assigned > p.total * 0.1 ? p.assigned : ''}</div>}
+                            {p.waiting > 0 && <div className="pipeline-segment" style={{ width: `${(p.waiting / p.total)*100}%`, background: 'var(--warning)' }} title={`Waiting: ${p.waiting}`}>{p.waiting > p.total * 0.1 ? p.waiting : ''}</div>}
+                          </div>
+                          
+                          {/* Legend for pipeline */}
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: 'var(--success)', borderRadius: '2px' }}></span> Delivered</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: 'var(--error)', borderRadius: '2px' }}></span> Short</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: 'var(--primary)', borderRadius: '2px' }}></span> On board</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: '#8b5cf6', borderRadius: '2px' }}></span> Assigned</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: 'var(--warning)', borderRadius: '2px' }}></span> Waiting</div>
+                          </div>
                         </div>
-                        <div className="inv-bar-val">{r.remaining} / {r.initial}</div>
-                        {r.reserved > 0 && <span className="inv-reserved">res: {r.reserved}</span>}
+                      );
+                    })}
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            {/* Deliveries over time */}
+            <div className="col-analytics">
+              <Card style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <div className="card-header">
+                  <h3 className="card-title">Deliveries over Time</h3>
+                </div>
+                <div className="card-body" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {/* Using SvgStepChart. We need to collect data from ledgerEntries */}
+                  {(() => {
+                    const deliveryEvents = state?.events.filter(e => e.kind === 'delivery') || [];
+                    let accumulated = 0;
+                    const data = [{ x: 0, y: 0 }];
+                    deliveryEvents.forEach(e => {
+                      accumulated += ((e as any).patientIds?.length || 0);
+                      data.push({ x: e.simSeconds, y: accumulated });
+                    });
+                    if (state) data.push({ x: state.simSeconds, y: accumulated });
+                    
+                    return (
+                      <div style={{ width: '100%', height: '100%' }}>
+                        <SvgStepChart 
+                          data={data} 
+                          maxX={Math.max(300, state?.simSeconds || 0)} 
+                          maxY={Math.max(10, dashboard.kpis.totalPatients)} 
+                          color="var(--success)"
+                        />
                       </div>
                     );
-                  })}
+                  })()}
                 </div>
-              ))}
+              </Card>
             </div>
           </div>
-          
-          {/* Ambulance Fleet */}
-          <div className="card" style={{ padding: '12px' }}>
-            <h3 style={{ fontSize: '0.95rem', marginBottom: '10px' }}>Ambulance Fleet</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {dashboard.ambulances.map(a => (
-                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', background: 'var(--bg-elevated)', borderRadius: '4px' }}>
-                  <div style={{ fontSize: '1.2rem' }}>🚑</div>
-                  <div style={{ flex: 1, fontSize: '0.8rem', overflowWrap: 'anywhere' }}>
-                    <strong>{a.label}</strong> ({a.onboard}/{a.capacity})<br/>
-                    <span style={{ color: 'var(--text-dim)' }}>{a.statusSentence}</span>
+        )}
+
+        {/* 5. Ambulance cards row */}
+        {dashboard && (
+          <div className="ambulance-grid" style={{ marginBottom: '1.5rem' }}>
+            {dashboard.ambulances.map(a => (
+              <Card key={a.id} style={{ padding: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}>
+                  <div style={{ fontSize: '1.75rem' }}>🚑</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '1rem', fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{a.label}</div>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{a.statusSentence}</div>
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-          
-          {/* Patients by injury */}
-          <div className="card" style={{ padding: '12px' }}>
-            <h3 style={{ fontSize: '0.95rem', marginBottom: '10px' }}>Patients by Injury</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {dashboard.patients.map(p => {
-                if (p.total === 0) return null;
-                return (
-                  <div key={p.type} style={{ fontSize: '0.75rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <strong style={{ textTransform: 'capitalize' }}>{p.type.replace('_', ' ')}</strong>
-                      <span>{p.total} total</span>
-                    </div>
-                    <div style={{ display: 'flex', height: '14px', borderRadius: '4px', overflow: 'hidden', background: '#e2e8f0' }}>
-                      <div style={{ width: `${(p.delivered / p.total)*100}%`, background: '#22c55e' }} title={`Delivered: ${p.delivered}`} />
-                      <div style={{ width: `${(p.inTransit / p.total)*100}%`, background: '#3b82f6' }} title={`In Transit: ${p.inTransit}`} />
-                      <div style={{ width: `${(p.waiting / p.total)*100}%`, background: '#f59e0b' }} title={`Waiting: ${p.waiting}`} />
-                    </div>
+                
+                <div className="hospital-bar-wrapper" style={{ marginBottom: '0.75rem' }}>
+                  <div className="hospital-bar-header">
+                    <span className="hospital-bar-title" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Load</span>
+                    <span className="hospital-bar-stats">{a.onboard}/{a.capacity}</span>
                   </div>
-                );
-              })}
+                  <div className="hospital-bar-track" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                    <div className="hospital-bar-fill" style={{ width: `${(a.onboard / a.capacity) * 100}%`, background: 'var(--primary)' }} />
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-dim)' }}>
+                  <div>Trips: {a.tripsCompleted}</div>
+                  {a.destinationName && <div>To: {a.destinationName}</div>}
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {/* 6. Legend and Summary */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px', padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', fontSize: '0.85rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '14px', background: 'white', border: '2px solid #16a34a', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a', fontSize: '9px', fontWeight: 'bold' }}>H</div> Scenario hospital</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '14px', background: '#ef4444', border: '1px solid white', borderRadius: '50%' }}></div> Incident</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '14px', height: '8px', background: 'white', border: '1px solid black', borderRadius: '2px' }}></div> Ambulance</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '16px', height: '3px', background: '#dc2626', borderTop: '1px dashed white' }}></div> Blocked road</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '16px', height: '3px', background: '#d97706' }}></div> Partial road</div>
+        </div>
+
+        {liveView.status === 'resolved' && (
+          <div className="alert alert-success" style={{ marginTop: '1rem', border: '1px solid var(--success)', background: 'rgba(16, 185, 129, 0.1)' }}>
+            <div style={{ flex: 1 }}>
+              <h3 style={{ color: 'var(--success)', marginBottom: '0.5rem', fontSize: '1.05rem' }}>Simulation Complete</h3>
+              <ul style={{ margin: 0, paddingLeft: '1.5rem', color: 'var(--text-main)', fontSize: '0.9rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                <li><strong>{liveView.deliveredCount}</strong> patients delivered in <strong>{time(liveView.simSeconds)}</strong>.</li>
+                <li><strong>{liveView.underResourcedCount}</strong> patients arrived at a hospital short of required resources.</li>
+                <li><strong>{liveView.ambulances.reduce((acc, a) => acc + a.trips, 0)}</strong> completed trips across the fleet.</li>
+              </ul>
             </div>
           </div>
-          
-        </div>
-      )}
+        )}
 
-      {/* ──── Compare Results ──── */}
-      {compareResult && (
-        <div className="card" style={{ padding: '1rem', marginTop: '1rem', background: 'var(--bg-elevated)', position: 'relative' }}>
-          <button 
-            onClick={() => setCompareResult(null)}
-            style={{ position: 'absolute', top: '0.75rem', right: '0.75rem', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', lineHeight: 1 }}
-            title="Close"
-          >
-            ×
-          </button>
-          <h3 style={{ fontSize: '1.05rem', marginBottom: '0.75rem' }}>Policy Comparison</h3>
-          <p style={{ fontSize: '0.8rem', marginBottom: '1rem' }}>Differences reflect severity-first ordering and stock-aware hospital choice together.</p>
-          <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead>
-              <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
-                <th style={{ padding: '0.5rem 0.3rem' }}>Metric</th>
-                <th style={{ padding: '0.5rem 0.3rem' }}>Resource-aware</th>
-                <th style={{ padding: '0.5rem 0.3rem' }}>Baseline</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style={{ padding: '0.5rem 0.3rem' }}>Mean time to hospital, high-priority patients (unconscious, limb loss, blood loss)</td>
-                <td style={{ padding: '0.5rem 0.3rem' }}>{compareResult.resource_aware.meanHighPriorityDeliverySeconds !== null ? time(Math.round(compareResult.resource_aware.meanHighPriorityDeliverySeconds)) : 'N/A'}</td>
-                <td style={{ padding: '0.5rem 0.3rem' }}>{compareResult.baseline.meanHighPriorityDeliverySeconds !== null ? time(Math.round(compareResult.baseline.meanHighPriorityDeliverySeconds)) : 'N/A'}</td>
-              </tr>
-              <tr style={{ background: 'rgba(0,0,0,0.02)' }}>
-                <td style={{ padding: '0.5rem 0.3rem' }}>Patients delivered to a hospital short of required stock</td>
-                <td style={{ padding: '0.5rem 0.3rem', color: compareResult.resource_aware.underResourcedCount === 0 ? 'var(--success)' : 'var(--error)' }}>
-                  {compareResult.resource_aware.underResourcedCount}
-                </td>
-                <td style={{ padding: '0.5rem 0.3rem', color: compareResult.baseline.underResourcedCount === 0 ? 'var(--success)' : 'var(--error)' }}>
-                  {compareResult.baseline.underResourcedCount}
-                </td>
-              </tr>
-              <tr>
-                <td style={{ padding: '0.5rem 0.3rem' }}>Simulated elapsed</td>
-                <td style={{ padding: '0.5rem 0.3rem' }}>{time(compareResult.resource_aware.simulatedSeconds)}</td>
-                <td style={{ padding: '0.5rem 0.3rem' }}>{time(compareResult.baseline.simulatedSeconds)}</td>
-              </tr>
-              <tr style={{ background: 'rgba(0,0,0,0.02)' }}>
-                <td style={{ padding: '0.5rem 0.3rem' }}>Completed trips</td>
-                <td style={{ padding: '0.5rem 0.3rem' }}>{compareResult.resource_aware.completedTrips}</td>
-                <td style={{ padding: '0.5rem 0.3rem' }}>{compareResult.baseline.completedTrips}</td>
-              </tr>
-            </tbody>
-          </table>
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.75rem', marginBottom: 0 }}>
-            One synthetic scenario on the Vile Parle graph. Not a general or clinical claim.
-          </p>
-        </div>
-      )}
-
-
-      {/* Completion summary */}
-      {liveView.status === 'resolved' && (
-        <div className="card" style={{ background: 'rgba(34, 197, 94, 0.1)', borderColor: 'var(--success)', padding: '0.75rem', marginTop: '0.75rem' }}>
-          <h3 style={{ color: 'var(--success)', marginBottom: '0.4rem', fontSize: '0.95rem' }}>Simulation Complete</h3>
-          <p style={{ fontSize: '0.85rem', marginBottom: '0.2rem' }}>
-            Delivered: {liveView.deliveredCount}. Of these, {liveView.underResourcedCount} arrived at a hospital short of required resources.
-          </p>
-          <p style={{ fontSize: '0.85rem', marginBottom: '0.2rem' }}>
-            Elapsed: {time(liveView.simSeconds)}
-          </p>
-          <p style={{ fontSize: '0.85rem', marginBottom: '0.2rem' }}>
-            Completed trips: {liveView.ambulances.reduce((acc, a) => acc + a.trips, 0)}
-          </p>
-          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
-            Synthetic scenario. Speed assumed {AMBULANCE_SPEED_MPS} m/s. Not medical advice.
-          </p>
-        </div>
-      )}
+      </div>
     </div>
   );
 };

@@ -1,7 +1,7 @@
 :root {
-  --bg-main: #0b0f19;
-  --bg-card: rgba(18, 24, 38, 0.75);
-  --bg-card-border: rgba(255, 255, 255, 0.08);
+  --bg-main: #0b1220;
+  --bg-card: #111a2b;
+  --bg-card-border: #1f2a3d;
   --bg-input: rgba(15, 23, 42, 0.6);
   --primary: #38bdf8;
   --primary-hover: #0284c7;
@@ -9,7 +9,7 @@
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
   --text-dim: #64748b;
-  --border-color: #1e293b;
+  --border-color: #1f2a3d;
   --success: #10b981;
   --warning: #f59e0b;
   --error: #ef4444;
@@ -840,3 +840,227 @@ select.form-input {
 /* Make sure the map never causes horizontal page overflow */
 .main-content { overflow-x: hidden; }
 
+/* Dashboard Card */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+.card-title-area {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.card-title {
+  font-size: 1.15rem;
+  margin: 0;
+}
+.card-info-icon {
+  color: var(--text-muted);
+  cursor: help;
+  display: flex;
+}
+.card-subtitle {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+.card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Tabular Nums for KPIs */
+.kpi-value {
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.kpi-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.kpi-context {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+/* KPI Strip */
+.kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+/* 12-Column Grid system */
+.grid-12 {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+@media (min-width: 1280px) {
+  .col-map { grid-column: span 8; }
+  .col-side { grid-column: span 4; }
+  .col-analytics { grid-column: span 4; }
+}
+@media (min-width: 980px) and (max-width: 1279px) {
+  .col-map { grid-column: span 12; }
+  .col-side { grid-column: span 12; }
+  .col-analytics { grid-column: span 6; }
+}
+@media (max-width: 979px) {
+  .kpi-strip { grid-template-columns: repeat(3, 1fr); }
+  .col-map { grid-column: span 12; }
+  .col-side { grid-column: span 12; }
+  .col-analytics { grid-column: span 12; }
+}
+@media (max-width: 640px) {
+  .kpi-strip { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Accessibility - prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Flashing animations */
+@keyframes flash-update {
+  0% { background-color: rgba(56, 189, 248, 0.4); }
+  100% { background-color: transparent; }
+}
+.flash-value {
+  animation: flash-update 1s ease-out;
+  border-radius: 4px;
+  padding: 0 4px;
+  margin: 0 -4px;
+}
+
+/* Status Chips */
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.status-ok { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+.status-low { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+.status-depleted { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+
+.hospital-bar-wrapper {
+  margin-top: 6px;
+  margin-bottom: 12px;
+}
+.hospital-bar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+.hospital-bar-title {
+  font-weight: 600;
+}
+.hospital-bar-stats {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.hospital-bar-track {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+  display: flex;
+}
+.hospital-bar-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+/* Analytics Pipeline */
+.pipeline-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+.pipeline-label {
+  width: 140px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pipeline-bar-wrapper {
+  flex: 1;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+}
+.pipeline-segment {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  color: #fff;
+  transition: width 0.3s ease;
+}
+
+/* Ambulance Cards */
+.ambulance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+/* Custom Tabs */
+.custom-tablist {
+  display: flex;
+  gap: 1px;
+  background: var(--border-color);
+  padding: 1px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+.custom-tab {
+  flex: 1;
+  background: var(--bg-card);
+  border: none;
+  padding: 8px 12px;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.custom-tab:first-child { border-top-left-radius: 7px; border-bottom-left-radius: 7px; }
+.custom-tab:last-child { border-top-right-radius: 7px; border-bottom-right-radius: 7px; }
+.custom-tab[aria-selected="true"] {
+  background: rgba(56, 189, 248, 0.1);
+  color: var(--primary);
+}
+.custom-tab:hover:not([aria-selected="true"]) {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-main);
+}

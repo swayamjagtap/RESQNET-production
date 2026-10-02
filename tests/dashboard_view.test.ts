@@ -35,12 +35,14 @@ describe('dashboard-view invariants', () => {
         const sumPatients = view.patients.reduce((s, p) => s + p.total, 0);
         const delivered = view.patients.reduce((s, p) => s + p.delivered, 0);
         const waiting = view.patients.reduce((s, p) => s + p.waiting, 0);
-        const inTransit = view.patients.reduce((s, p) => s + p.inTransit, 0);
-        expect(delivered + waiting + inTransit).toBe(sumPatients);
+        const onboard = view.patients.reduce((s, p) => s + p.onboard, 0);
+        const assigned = view.patients.reduce((s, p) => s + p.assigned, 0);
+        const deliveredShort = view.patients.reduce((s, p) => s + p.deliveredShort, 0);
+        expect(delivered + deliveredShort + waiting + onboard + assigned).toBe(sumPatients);
         
-        // 3. sum of hospital deliveries received = delivered
+        // 3. sum of hospital deliveries received = delivered + deliveredShort
         const sumHospDeliveries = view.hospitals.reduce((s, h) => s + h.deliveriesReceived, 0);
-        expect(sumHospDeliveries).toBe(view.kpis.delivered);
+        expect(sumHospDeliveries).toBe(view.kpis.delivered + view.kpis.deliveredShort);
         
         // 4. reroutes counter equals the number of reroute events
         const actualReroutes = state.events.filter(e => e.kind === 'reroute').length;
@@ -51,7 +53,7 @@ describe('dashboard-view invariants', () => {
     // the KPI strip numbers equal the values in the completion summary at the end
     const view = buildDashboardView(state, input)!;
     expect(view.kpis.delivered).toBe(state.deliveredCount);
-    expect(view.kpis.underResourcedArrivals).toBe(state.underResourcedCount);
+    expect(view.kpis.deliveredShort).toBe(state.underResourcedCount);
   });
 
   it('maintains invariants on a real-graph run (stress scenario)', async () => {
@@ -80,8 +82,10 @@ describe('dashboard-view invariants', () => {
         const sumPatients = view.patients.reduce((s, p) => s + p.total, 0);
         const delivered = view.patients.reduce((s, p) => s + p.delivered, 0);
         const waiting = view.patients.reduce((s, p) => s + p.waiting, 0);
-        const inTransit = view.patients.reduce((s, p) => s + p.inTransit, 0);
-        expect(delivered + waiting + inTransit).toBe(sumPatients);
+        const onboard = view.patients.reduce((s, p) => s + p.onboard, 0);
+        const assigned = view.patients.reduce((s, p) => s + p.assigned, 0);
+        const deliveredShort = view.patients.reduce((s, p) => s + p.deliveredShort, 0);
+        expect(delivered + deliveredShort + waiting + onboard + assigned).toBe(sumPatients);
       }
     }
   });

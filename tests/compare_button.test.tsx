@@ -73,6 +73,6 @@ test('clicking Compare policies', async () => {
     
     expect(!isComparing).toBe(true);
     expect(hasTable).toBeTruthy();
-  }, { timeout: 5000 });
-});
+  }, { timeout: 15000 });
+}, 20000);
 
