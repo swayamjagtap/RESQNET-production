@@ -17,10 +17,14 @@ export interface PolicyMetrics {
   meanHighPriorityDeliverySeconds: number | null;
 }
 
-export interface ComparisonResult {
+export type ComparisonResult = {
+  ok: true;
   resource_aware: PolicyMetrics;
   baseline: PolicyMetrics;
-}
+} | {
+  ok: false;
+  reason: string;
+};
 
 export function runPolicyComparison(
   scenario: Scenario,
@@ -40,13 +44,16 @@ export function runPolicyComparison(
 
     // Run headless to completion
     let maxTicks = 100000;
-    while (state.status !== 'resolved' && maxTicks > 0) {
+    while (state.status === 'running' && maxTicks > 0) {
+      if (state.simSeconds > 6 * 3600) {
+        return { ok: false, reason: `Simulation exceeded 6 simulated hours for ${policy}` };
+      }
       engine.tick();
       maxTicks--;
     }
 
-    if (maxTicks === 0) {
-      throw new Error(`Simulation failed to resolve in 100k ticks for ${policy}`);
+    if (state.status === 'running') {
+      return { ok: false, reason: `Simulation failed to resolve in 100k ticks for ${policy}` };
     }
 
     const completedTrips = state.ambulances.reduce((sum, a) => sum + a.trips, 0);
@@ -93,5 +100,5 @@ export function runPolicyComparison(
     };
   }
 
-  return results as ComparisonResult;
+  return { ok: true, ...results } as ComparisonResult;
 }

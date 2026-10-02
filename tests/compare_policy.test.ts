@@ -59,6 +59,9 @@ describe('Policy Comparison', () => {
     
     const res = runPolicyComparison(scenario, hospitals, ambulances, graph);
     
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    
     // baseline goes to H1 (under-resourced because no vent)
     expect(res.baseline.underResourcedCount).toBe(1);
     
