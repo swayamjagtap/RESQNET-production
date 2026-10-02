@@ -30,7 +30,13 @@ export function buildDisplayNameMaps(
     }
     for (const h of simInput.hospitals) {
       hospitalNames.set(h.id, h.name);
-      hospitalNames.set(h.graphNodeId, h.name);
+      if (h.graphNodeId) {
+        hospitalNames.set(h.graphNodeId, h.name);
+        nodeNames.set(h.graphNodeId, h.name);
+      }
+    }
+    if (simInput.incidentNodeId) {
+      nodeNames.set(simInput.incidentNodeId, 'the incident');
     }
   }
   if (state) {
@@ -39,7 +45,13 @@ export function buildDisplayNameMaps(
     }
     for (const h of state.hospitals) {
       hospitalNames.set(h.id, h.name);
-      hospitalNames.set(h.node, h.name);
+      if (h.node) {
+        hospitalNames.set(h.node, h.name);
+        nodeNames.set(h.node, h.name);
+      }
+    }
+    if (state.incidentNode) {
+      nodeNames.set(state.incidentNode, 'the incident');
     }
   }
 
@@ -57,23 +69,34 @@ export function buildDisplayNameMaps(
         nodeRoads.get(edge.to)!.add(cleanName);
       }
     }
-    
+
     for (const nodeId of Object.keys(graph.nodes)) {
+      if (nodeNames.has(nodeId)) continue; // Keep hospital or incident name
       const roads = nodeRoads.get(nodeId);
       if (roads && roads.size > 0) {
         const roadArr = Array.from(roads);
-        if (roadArr.length === 1) {
-          nodeNames.set(nodeId, `a junction on ${roadArr[0]}`);
-        } else {
-          nodeNames.set(nodeId, `junction of ${roadArr.join(' and ')}`);
-        }
+        nodeNames.set(nodeId, `a junction on ${roadArr[0]}`);
       } else {
-        nodeNames.set(nodeId, 'junction');
+        nodeNames.set(nodeId, 'a junction');
       }
     }
   }
 
   return { ambulanceLabels, hospitalNames, roadNames, nodeNames, edgeLengths };
+}
+
+export function replaceRawNodeIds(text: string, maps: DisplayNameMaps): string {
+  if (!text) return '';
+  let s = String(text);
+  for (const [id, label] of maps.ambulanceLabels) {
+    if (id && id !== label) s = s.split(id).join(label);
+  }
+  for (const [id, name] of maps.hospitalNames) {
+    if (id && id !== name) s = s.split(id).join(name);
+  }
+  s = s.replace(/\bn\d{5,}\b/g, m => maps.nodeNames.get(m) || 'a junction');
+  s = s.replace(/\be-[a-f0-9]{6,}\b/gi, 'road segment');
+  return s;
 }
 
 /** Map a sequence of node IDs to road/junction names and compute distance. */
@@ -83,19 +106,17 @@ function routeToNames(route: string[] | undefined, maps: DisplayNameMaps): strin
   for (let i = 0; i < route.length - 1; i++) {
     totalMetres += maps.edgeLengths.get(`${route[i]}-${route[i + 1]}`) || 0;
   }
-  
-  const names = route.map(id => maps.nodeNames.get(id) || 'junction');
-  // Deduplicate consecutive identical names and ignore plain 'junction' unless it's the only thing
+
+  const names = route.map(id => maps.nodeNames.get(id) || 'a junction');
+  // Deduplicate consecutive identical names
   const deduped: string[] = [];
   for (const n of names) {
-    if (n !== 'junction' && n !== deduped[deduped.length - 1]) deduped.push(n);
+    if (n !== 'a junction' && n !== deduped[deduped.length - 1]) deduped.push(n);
   }
-  
-  // If we filtered everything, fallback
+
   if (deduped.length === 0) deduped.push(names[0]);
 
-  // Take first up to 5
-  let routeStr = deduped.slice(0, 5).map(s => s.replace(/^a junction on /, '').replace(/^junction of /, '')).join(' → ');
+  let routeStr = deduped.slice(0, 5).map(s => s.replace(/^a junction on /, '')).join(' → ');
   if (deduped.length > 5) routeStr += ' → …';
 
   const km = (totalMetres / 1000).toFixed(1);
@@ -112,14 +133,7 @@ export function describeEvent(e: SimEvent, maps: DisplayNameMaps): string {
   const text = String(e.text || '');
 
   // For any text fallback, replace IDs in the raw text
-  const replaceIds = (str: string) => {
-    let s = str;
-    for (const [id, label] of maps.ambulanceLabels) s = s.split(id).join(label);
-    for (const [id, name] of maps.hospitalNames) s = s.split(id).join(name);
-    s = s.replace(/\bn(\d{7,})\b/g, m => maps.nodeNames.get(m) || 'junction');
-    s = s.replace(/\be-[a-f0-9]{6,}\b/gi, 'road segment');
-    return s;
-  };
+  const replaceIds = (str: string) => replaceRawNodeIds(str, maps);
 
   if (e.kind === 'dispatch') {
     const amb = getAmb(e.ambulanceId);

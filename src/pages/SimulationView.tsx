@@ -8,7 +8,7 @@ import { SimEngine, AMBULANCE_SPEED_MPS } from '../sim/engine';
 import type { SimState } from '../sim/types';
 import { accumulatePlayback } from '../lib/playback';
 import { computeCollocationOffset, getMapPoints } from '../lib/map-utils';
-import { buildDisplayNameMaps, describeEvent, isKeyEvent } from '../lib/event-display';
+import { buildDisplayNameMaps, describeEvent, isKeyEvent, replaceRawNodeIds } from '../lib/event-display';
 import { RoadLayer } from '../components/RoadLayer';
 import { createLedger, verifyChain, failureReport, time, type Ledger, type LedgerEntry, type VerifyResult } from '../lib/audit';
 import { drainEventsToLedger } from '../lib/ledger-feed';
@@ -607,7 +607,14 @@ export const SimulationView: React.FC<{
         )}
         {liveView.ambulances.some(a => a.status === 'stuck') && (
           <div className="alert alert-error">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{marginRight: '0.5rem', display: 'inline-block', verticalAlign: 'middle'}}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Ambulance stuck: {state?.ambulances.find(a => a.status === 'stuck')?.stuckReason}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{marginRight: '0.5rem', display: 'inline-block', verticalAlign: 'middle'}}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            {liveView.ambulances.filter(a => a.status === 'stuck').map(a => {
+              const ambObj = state?.ambulances.find(st => st.id === a.id);
+              const label = displayMaps.ambulanceLabels.get(a.id) || a.label || a.id;
+              const rawReason = ambObj?.stuckReason || 'stuck';
+              const cleanReason = replaceRawNodeIds(rawReason, displayMaps);
+              return `${label} is stuck: ${cleanReason}`;
+            }).join(' | ')}
           </div>
         )}
 
@@ -827,9 +834,9 @@ export const SimulationView: React.FC<{
               {/* Tab Content */}
               <div className="tab-panel-container overflow-y-auto" style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
                 {tab === 'log' && (
-                  <div style={{ paddingBottom: '3rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.5rem', flexShrink: 0, position: 'sticky', top: 0, background: 'var(--bg-card)', zIndex: 10, padding: '0.5rem 0', borderBottom: '1px solid var(--border-color)' }}>
-                      <h3 style={{ fontSize: '1rem', margin: 0 }}>Decision Log</h3>
+                  <div className="log-tab-wrapper">
+                    <div className="log-header">
+                      <h3 style={{ fontSize: '0.95rem', margin: 0, fontWeight: 700 }}>Decision Log</h3>
                       {dashboard && (
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                           {dashboard.kpis.delivered} delivered · {dashboard.kpis.waiting} waiting
@@ -840,7 +847,7 @@ export const SimulationView: React.FC<{
                     <div
                       ref={logContainerRef}
                       onScroll={handleLogScroll}
-                      style={{ background: 'var(--bg-input)', borderRadius: '8px', padding: '0.5rem', fontSize: '0.85rem' }}
+                      className="log-scroll-container"
                       aria-live="polite"
                     >
                       {displayEntries.map(e => {
@@ -1025,17 +1032,17 @@ export const SimulationView: React.FC<{
           </div>
         </div>
 
-        {/* 4. Analytics row */}
+        {/* 4. Analytics layout */}
         {dashboard && (
-          <div className="analytics-grid">
-            {/* Hospital Inventory */}
-            <div className="hospital-panel">
-              <Card style={{ height: '100%' }}>
+          <div className="analytics-container">
+            {/* Row A: Hospital Inventory (Full width) */}
+            <div className="analytics-row-a">
+              <Card style={{ width: '100%' }}>
                 <div className="card-header">
                   <h3 className="card-title">Hospital Inventory</h3>
                 </div>
                 <div className="card-body">
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+                  <div className="hospital-subcards-grid">
                     {dashboard.hospitals.map(h => {
                       const depleted = [];
                       if (h.icu.remaining === 0 && h.icu.initial > 0) depleted.push('ICU');
@@ -1098,121 +1105,120 @@ export const SimulationView: React.FC<{
               </Card>
             </div>
 
-            {/* Patients by Injury */}
-            <div className="patients-panel">
-              <Card style={{ height: '100%' }}>
-                <div className="card-header">
-                  <div className="card-title-area">
-                    <h3 className="card-title">Patients by Injury</h3>
-                    <span className="card-info-icon" title="Pipeline: Waiting for dispatch -> Assigned -> On board -> Delivered (or Delivered short of stock)">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
-                    </span>
-                  </div>
-                </div>
-                <div className="card-body">
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {/* Legend for pipeline */}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: 'var(--success)', borderRadius: '2px' }}></span> Delivered</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: 'var(--error)', borderRadius: '2px' }}></span> Short</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: 'var(--primary)', borderRadius: '2px' }}></span> On board</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: '#8b5cf6', borderRadius: '2px' }}></span> Assigned</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: 'var(--warning)', borderRadius: '2px' }}></span> Waiting</div>
+            {/* Row B: Patients by Injury and Deliveries over Time side-by-side */}
+            <div className="analytics-row-b">
+              {/* Patients by Injury */}
+              <div className="patients-panel">
+                <Card style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                  <div className="card-header">
+                    <div className="card-title-area">
+                      <h3 className="card-title">Patients by Injury</h3>
+                      <span className="card-info-icon" title="Pipeline: Waiting for dispatch -> Assigned -> On board -> Delivered (or Delivered short of stock)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+                      </span>
                     </div>
-                    {dashboard.patients.map(p => {
-                      if (p.total === 0) return null;
+                  </div>
+                  <div className="card-body" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {/* One Legend for pipeline */}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: 'var(--success)', borderRadius: '2px' }}></span> Delivered</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: 'var(--error)', borderRadius: '2px' }}></span> Short</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: 'var(--primary)', borderRadius: '2px' }}></span> On board</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: '#8b5cf6', borderRadius: '2px' }}></span> Assigned</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: 'var(--warning)', borderRadius: '2px' }}></span> Waiting</div>
+                      </div>
+                      {dashboard.patients.map(p => {
+                        if (p.total === 0) return null;
+                        return (
+                          <div key={p.type}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem', fontSize: '0.8rem' }}>
+                              <strong style={{ textTransform: 'capitalize' }}>{p.type.replace('_', ' ')}</strong>
+                              <span style={{ color: 'var(--text-muted)' }}>{p.total} total</span>
+                            </div>
+                            
+                            <div className="pipeline-bar-wrapper">
+                              {p.delivered > 0 && <div className="pipeline-segment" style={{ width: `${(p.delivered / p.total)*100}%`, background: 'var(--success)' }} title={`Delivered: ${p.delivered}`}>{p.delivered > p.total * 0.1 ? p.delivered : ''}</div>}
+                              {p.deliveredShort > 0 && <div className="pipeline-segment" style={{ width: `${(p.deliveredShort / p.total)*100}%`, background: 'var(--error)' }} title={`Delivered short: ${p.deliveredShort}`}>{p.deliveredShort > p.total * 0.1 ? p.deliveredShort : ''}</div>}
+                              {p.onboard > 0 && <div className="pipeline-segment" style={{ width: `${(p.onboard / p.total)*100}%`, background: 'var(--primary)' }} title={`On board: ${p.onboard}`}>{p.onboard > p.total * 0.1 ? p.onboard : ''}</div>}
+                              {p.assigned > 0 && <div className="pipeline-segment" style={{ width: `${(p.assigned / p.total)*100}%`, background: '#8b5cf6' }} title={`Assigned: ${p.assigned}`}>{p.assigned > p.total * 0.1 ? p.assigned : ''}</div>}
+                              {p.waiting > 0 && <div className="pipeline-segment" style={{ width: `${(p.waiting / p.total)*100}%`, background: 'var(--warning)' }} title={`Waiting: ${p.waiting}`}>{p.waiting > p.total * 0.1 ? p.waiting : ''}</div>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </Card>
+              </div>
+
+              {/* Deliveries over time */}
+              <div className="deliveries-panel">
+                <Card style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                  <div className="card-header">
+                    <h3 className="card-title">Deliveries over Time</h3>
+                  </div>
+                  <div className="card-body" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '220px' }}>
+                    {(() => {
+                      const deliveryEvents = state?.events.filter(e => e.kind === 'delivery') || [];
+                      let accumulated = 0;
+                      const data = [{ x: 0, y: 0 }];
+                      deliveryEvents.forEach(e => {
+                        accumulated += ((e as any).patientIds?.length || 0);
+                        data.push({ x: e.simSeconds, y: accumulated });
+                      });
+                      if (state) data.push({ x: state.simSeconds, y: accumulated });
+                      
                       return (
-                        <div key={p.type}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem', fontSize: '0.85rem' }}>
-                            <strong style={{ textTransform: 'capitalize' }}>{p.type.replace('_', ' ')}</strong>
-                            <span style={{ color: 'var(--text-muted)' }}>{p.total} total</span>
-                          </div>
-                          
-                          <div className="pipeline-bar-wrapper">
-                            {p.delivered > 0 && <div className="pipeline-segment" style={{ width: `${(p.delivered / p.total)*100}%`, background: 'var(--success)' }} title={`Delivered: ${p.delivered}`}>{p.delivered > p.total * 0.1 ? p.delivered : ''}</div>}
-                            {p.deliveredShort > 0 && <div className="pipeline-segment" style={{ width: `${(p.deliveredShort / p.total)*100}%`, background: 'var(--error)' }} title={`Delivered short: ${p.deliveredShort}`}>{p.deliveredShort > p.total * 0.1 ? p.deliveredShort : ''}</div>}
-                            {p.onboard > 0 && <div className="pipeline-segment" style={{ width: `${(p.onboard / p.total)*100}%`, background: 'var(--primary)' }} title={`On board: ${p.onboard}`}>{p.onboard > p.total * 0.1 ? p.onboard : ''}</div>}
-                            {p.assigned > 0 && <div className="pipeline-segment" style={{ width: `${(p.assigned / p.total)*100}%`, background: '#8b5cf6' }} title={`Assigned: ${p.assigned}`}>{p.assigned > p.total * 0.1 ? p.assigned : ''}</div>}
-                            {p.waiting > 0 && <div className="pipeline-segment" style={{ width: `${(p.waiting / p.total)*100}%`, background: 'var(--warning)' }} title={`Waiting: ${p.waiting}`}>{p.waiting > p.total * 0.1 ? p.waiting : ''}</div>}
-                          </div>
+                        <div style={{ width: '100%', flex: 1, minHeight: '220px' }}>
+                          <SvgStepChart 
+                            data={data} 
+                            maxX={Math.max(300, state?.simSeconds || 0)} 
+                            maxY={Math.max(10, dashboard.kpis.totalPatients)} 
+                            color="var(--success)"
+                          />
                         </div>
                       );
-                    })}
+                    })()}
                   </div>
-                </div>
-              </Card>
-            </div>
-
-            {/* Deliveries over time */}
-            <div className="deliveries-panel">
-              <Card style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                <div className="card-header">
-                  <h3 className="card-title">Deliveries over Time</h3>
-                </div>
-                <div className="card-body" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {/* Using SvgStepChart. We need to collect data from ledgerEntries */}
-                  {(() => {
-                    const deliveryEvents = state?.events.filter(e => e.kind === 'delivery') || [];
-                    let accumulated = 0;
-                    const data = [{ x: 0, y: 0 }];
-                    deliveryEvents.forEach(e => {
-                      accumulated += ((e as any).patientIds?.length || 0);
-                      data.push({ x: e.simSeconds, y: accumulated });
-                    });
-                    if (state) data.push({ x: state.simSeconds, y: accumulated });
-                    
-                    return (
-                      <div style={{ width: '100%', height: '100%', aspectRatio: '16/9' }}>
-                        <SvgStepChart 
-                          data={data} 
-                          maxX={Math.max(300, state?.simSeconds || 0)} 
-                          maxY={Math.max(10, dashboard.kpis.totalPatients)} 
-                          color="var(--success)"
-                        />
-                      </div>
-                    );
-                  })()}
-                </div>
-              </Card>
+                </Card>
+              </div>
             </div>
           </div>
         )}
 
         {/* 5. Ambulance cards row */}
         {dashboard && (
-          <div className="ambulance-grid" style={{ marginBottom: '1.5rem', alignItems: 'start' }}>
+          <div className="ambulance-grid">
             {dashboard.ambulances.map(a => {
               const stateStatus = a.statusSentence.startsWith('stuck') ? 'stuck' : a.statusSentence === 'idle' ? 'idle' : 'active';
               return (
-                <div key={a.id} className="card" style={{ padding: '0.6rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.75rem', background: 'var(--bg-card)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0 }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{flexShrink: 0, color: stateStatus === 'stuck' ? 'var(--error)' : stateStatus === 'idle' ? 'var(--text-muted)' : 'var(--primary)'}}>
-                        <rect x="1" y="3" width="15" height="13"></rect>
-                        <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
-                        <circle cx="5.5" cy="18.5" r="2.5"></circle>
-                        <circle cx="18.5" cy="18.5" r="2.5"></circle>
-                      </svg>
-                      <strong style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.85rem' }}>{a.label}</strong>
-                    </div>
+                <div key={a.id} className="card ambulance-card" style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '4px', background: 'var(--bg-card)' }}>
+                  {/* Line 1: icon + label + status chip right-aligned */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{flexShrink: 0, color: stateStatus === 'stuck' ? 'var(--error)' : stateStatus === 'idle' ? 'var(--text-muted)' : 'var(--primary)'}}>
+                      <rect x="1" y="3" width="15" height="13"></rect>
+                      <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+                      <circle cx="5.5" cy="18.5" r="2.5"></circle>
+                      <circle cx="18.5" cy="18.5" r="2.5"></circle>
+                    </svg>
+                    <strong style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.85rem' }}>{a.label}</strong>
                     <span style={{ 
-                      padding: '1px 4px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', fontSize: '0.6rem', textTransform: 'uppercase', flexShrink: 0,
+                      marginLeft: 'auto', padding: '1px 6px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', fontSize: '0.65rem', textTransform: 'uppercase', flexShrink: 0, fontWeight: 600,
                       color: stateStatus === 'stuck' ? 'var(--error)' : stateStatus === 'idle' ? 'var(--text-muted)' : 'var(--primary)'
                     }}>
                       {stateStatus}
                     </span>
                   </div>
                   
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)' }}>
-                    <span>Load {a.onboard}/{a.capacity}</span>
-                    <div style={{ flex: 1, background: 'var(--bg-input)', height: '4px', borderRadius: '2px', overflow: 'hidden' }}>
+                  {/* Line 2: ONE line with ellipsis */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <span style={{ flexShrink: 0 }}>Load {a.onboard}/{a.capacity}</span>
+                    <div style={{ width: '36px', flexShrink: 0, background: 'var(--bg-input)', height: '4px', borderRadius: '2px', overflow: 'hidden' }}>
                       <div style={{ height: '100%', width: `${(a.onboard / a.capacity) * 100}%`, background: 'var(--primary)' }} />
                     </div>
-                  </div>
-                  
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    <span>Trips {a.tripsCompleted}</span>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.destinationName ? `· ${a.destinationName}` : ''}</span>
+                    <span style={{ flexShrink: 0 }}>· Trips {a.tripsCompleted}</span>
+                    {a.destinationName && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>· {a.destinationName}</span>}
                   </div>
                 </div>
               );

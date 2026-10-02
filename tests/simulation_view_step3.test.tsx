@@ -5,7 +5,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { SimulationView } from '../src/pages/SimulationView';
 import { demoScenario, demoHospitals, demoAmbulances } from '../src/lib/demoScenario';
-import { loadVileParleGraph } from '../src/sim/graph';
+import { loadVileParleGraph, RoadGraph } from '../src/sim/graph';
+import { buildDisplayNameMaps, replaceRawNodeIds } from '../src/lib/event-display';
+import roadData from '../src/data/vileparle-roads.json';
 import type { Ambulance } from '../src/lib/types';
 
 global.ResizeObserver = class ResizeObserver {
@@ -37,7 +39,7 @@ vi.mock('leaflet', () => ({
 }));
 vi.mock('../src/components/RoadLayer', () => ({ RoadLayer: () => <div /> }));
 
-describe('STEP 3 SimulationView verification tests in jsdom', () => {
+describe('SimulationView Layout & Display Tests', () => {
   it('1. tablist keyboard behaviour', async () => {
     await loadVileParleGraph();
     render(
@@ -96,7 +98,57 @@ describe('STEP 3 SimulationView verification tests in jsdom', () => {
     expect(style.overflowY).toBe('auto');
   });
 
-  it('3. fleet strip with 12 ambulances renders 12 rows', async () => {
+  it('3. analytics Row A and Row B exist with grid classes', async () => {
+    await loadVileParleGraph();
+    const { container } = render(
+      <SimulationView
+        title={demoScenario.title}
+        scenario={demoScenario}
+        hospitals={demoHospitals}
+        ambulances={demoAmbulances}
+      />
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('.analytics-container')).not.toBeNull();
+    });
+
+    expect(container.querySelector('.analytics-row-a')).not.toBeNull();
+    expect(container.querySelector('.analytics-row-b')).not.toBeNull();
+    expect(container.querySelector('.hospital-subcards-grid')).not.toBeNull();
+  });
+
+  it('4. ambulance grid uses auto-fit in index.css', () => {
+    const cssPath = path.join(__dirname, '../src/styles/index.css');
+    const cssContent = fs.readFileSync(cssPath, 'utf8');
+    expect(cssContent).toMatch(/repeat\(auto-fit,\s*minmax\(220px,\s*1fr\)\)/);
+    expect(cssContent).not.toMatch(/\.ambulance-grid\s*\{[^}]*repeat\(auto-fill/);
+  });
+
+  it('5. log header is outside the scroll container', async () => {
+    await loadVileParleGraph();
+    const { container } = render(
+      <SimulationView
+        title={demoScenario.title}
+        scenario={demoScenario}
+        hospitals={demoHospitals}
+        ambulances={demoAmbulances}
+      />
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('.log-header')).not.toBeNull();
+    });
+
+    const logHeader = container.querySelector('.log-header');
+    const scrollContainer = container.querySelector('.log-scroll-container');
+    expect(logHeader).not.toBeNull();
+    expect(scrollContainer).not.toBeNull();
+    // Header must NOT be inside scrollContainer
+    expect(scrollContainer?.contains(logHeader)).toBe(false);
+  });
+
+  it('6. fleet strip with 12 ambulances renders 12 cards/rows', async () => {
     await loadVileParleGraph();
     const twelveAmbulances: Ambulance[] = Array.from({ length: 12 }, (_, i) => ({
       id: `amb-${i + 1}`,
@@ -122,14 +174,33 @@ describe('STEP 3 SimulationView verification tests in jsdom', () => {
       expect(screen.getAllByText('Amb 001').length).toBeGreaterThan(0);
     });
 
-    // Check that all 12 ambulance titles exist in fleet strip / side column
     for (let i = 1; i <= 12; i++) {
       const label = `Amb ${String(i).padStart(3, '0')}`;
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     }
   });
 
-  it('4. stacked comparison blocks render computed note', async () => {
+  it('7. raw node ids replaced in stuck reason using real-graph maps', () => {
+    const graph = new RoadGraph(roadData as any);
+    const maps = buildDisplayNameMaps(
+      {
+        scenario: demoScenario,
+        hospitals: demoHospitals,
+        ambulances: demoAmbulances,
+        incidentNodeId: 'n245669635',
+        incidentSnap: { nodeId: 'n245669635', distanceMetres: 10 },
+      } as any,
+      null,
+      graph
+    );
+
+    const stuckReasonWithNode = 'No reachable route to n245669635';
+    const replaced = replaceRawNodeIds(stuckReasonWithNode, maps);
+    expect(replaced).not.toMatch(/\bn\d{5,}\b/);
+    expect(replaced).toBe('No reachable route to the incident');
+  });
+
+  it('8. stacked comparison blocks render computed note', async () => {
     await loadVileParleGraph();
     vi.spyOn(window, 'alert').mockImplementation(() => {});
     render(
@@ -156,7 +227,7 @@ describe('STEP 3 SimulationView verification tests in jsdom', () => {
     }, { timeout: 15000 });
   }, 20000);
 
-  it('5. no emoji characters remain in simulation components', () => {
+  it('9. no emoji characters remain in simulation components', () => {
     const filesToCheck = [
       'src/pages/SimulationView.tsx',
       'src/components/Card.tsx',
