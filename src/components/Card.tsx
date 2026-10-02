@@ -9,9 +9,10 @@ export interface CardProps {
   className?: string;
   bodyClassName?: string;
   style?: React.CSSProperties;
+  fill?: boolean;
 }
 
-export function Card({ title, subtitle, infoTooltip, actions, children, className = '', bodyClassName = '', style }: CardProps) {
+export function Card({ title, subtitle, infoTooltip, actions, children, className = '', bodyClassName = '', style, fill }: CardProps) {
   return (
     <div className={`card ${className}`} style={style}>
       {(title || actions) && (
@@ -32,7 +33,7 @@ export function Card({ title, subtitle, infoTooltip, actions, children, classNam
           {actions && <div className="card-actions">{actions}</div>}
         </div>
       )}
-      <div className={`card-body ${bodyClassName}`}>
+      <div className={`card-body ${bodyClassName} ${fill ? 'card-body-fill' : ''}`.trim()}>
         {children}
       </div>
     </div>

@@ -65,7 +65,7 @@ export interface VerifyFailed {
 export type VerifyResult = VerifyOk | VerifyFailed;
 
 export function failureReport(r: VerifyFailed): string {
-  let result = `🚨 Tampering detected at entry ${r.index}: ${r.reason}\nRecorded hash:\n${r.recordedHash}\nRecomputed hash:\n${r.recomputedHash}`;
+  let result = `Tampering detected at entry ${r.index}: ${r.reason}\nRecorded hash:\n${r.recordedHash}\nRecomputed hash:\n${r.recomputedHash}`;
   if (r.recordedPreviousHash !== undefined && r.recordedPreviousHash !== r.expectedPreviousHash) {
     result += `\nRecorded previous hash:\n${r.recordedPreviousHash}\nExpected previous hash:\n${r.expectedPreviousHash}`;
   }

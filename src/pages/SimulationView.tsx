@@ -49,7 +49,8 @@ function getHospitalIcon() {
 }
 
 function getIncidentIcon() {
-  const html = `<div style="background:#ef4444;border:2px solid white;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:11px;box-shadow:0 1px 4px rgba(0,0,0,0.4);cursor:default;">🔥</div>`;
+  const svg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 3.5z"/></svg>`;
+  const html = `<div style="background:white;border:2px solid #ef4444;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.4);cursor:default;">${svg}</div>`;
   return L.divIcon({ html, className: '', iconSize: [18, 18], iconAnchor: [9, 9] });
 }
 
@@ -545,7 +546,15 @@ export const SimulationView: React.FC<{
   const preStartRoadChangeSeen = new Set<string>();
 
   // Play/Pause button label
-  const playLabel = isResolved ? '✓ Done' : playing ? '⏸ Pause' : (liveView.status === 'running' && !playing) ? '▶ Resume' : '▶ Start';
+  const playLabel = isResolved ? (
+    <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{marginRight:'4px', verticalAlign: 'middle'}}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Done</>
+  ) : playing ? (
+    <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{marginRight:'4px', verticalAlign: 'middle'}}><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Pause</>
+  ) : (liveView.status === 'running' && !playing) ? (
+    <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{marginRight:'4px', verticalAlign: 'middle'}}><polygon points="5 3 19 12 5 21 5 3"/></svg> Resume</>
+  ) : (
+    <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{marginRight:'4px', verticalAlign: 'middle'}}><polygon points="5 3 19 12 5 21 5 3"/></svg> Start</>
+  );
   
   const headHash = ledgerRef.current?.head() || '0'.repeat(64);
 
@@ -577,7 +586,9 @@ export const SimulationView: React.FC<{
           }} disabled={comparing}>
             {comparing ? 'Comparing...' : 'Compare policies'}
           </button>
-          <button className="btn btn-secondary" onClick={() => setRefitCounter(c => c + 1)} title="Re-centre map">⊕</button>
+          <button className="btn btn-secondary" onClick={() => setRefitCounter(c => c + 1)} title="Re-centre map" aria-label="Re-centre map">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{verticalAlign: 'middle'}}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          </button>
         </div>
       </header>
 
@@ -585,7 +596,8 @@ export const SimulationView: React.FC<{
         {/* Warnings */}
         {mapPoints.warnings.length > 0 && (
           <div className="alert alert-warning">
-            ⚠️ {mapPoints.warnings.join(' ')}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{marginRight: '0.5rem', display: 'inline-block', verticalAlign: 'middle'}}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            {mapPoints.warnings.join(' ')}
           </div>
         )}
         {simInput?.incidentSnap?.warning && (
@@ -595,59 +607,59 @@ export const SimulationView: React.FC<{
         )}
         {liveView.ambulances.some(a => a.status === 'stuck') && (
           <div className="alert alert-error">
-            ⚠️ Ambulance stuck: {state?.ambulances.find(a => a.status === 'stuck')?.stuckReason}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{marginRight: '0.5rem', display: 'inline-block', verticalAlign: 'middle'}}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Ambulance stuck: {state?.ambulances.find(a => a.status === 'stuck')?.stuckReason}
           </div>
         )}
 
         {/* 2. KPI strip */}
         {dashboard && (
           <div className="kpi-strip" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-            <Card style={{ padding: '0.75rem 1rem', height: '100px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <Card style={{ padding: '12px', height: '92px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                <span style={{ fontSize: '1.2rem' }}>⏱️</span>
-                <span className="kpi-label" style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Elapsed</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{color: 'var(--text-muted)'}}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span className="kpi-label" style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Elapsed</span>
               </div>
-              <div className="kpi-value" style={{ fontSize: '1.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{dashboard.kpis.simulatedTime}</div>
+              <div className="kpi-value" style={{ fontSize: '28px', fontWeight: 700, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{dashboard.kpis.simulatedTime}</div>
               <div className="kpi-context" style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Scenario duration</div>
             </Card>
-            <Card style={{ padding: '0.75rem 1rem', height: '100px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <Card style={{ padding: '12px', height: '92px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                <span style={{ fontSize: '1.2rem' }}>🏥</span>
-                <span className="kpi-label" style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Delivered</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{color: 'var(--text-muted)'}}><path d="M3 21h18"/><path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"/><path d="M9 10h6"/><path d="M12 7v6"/></svg>
+                <span className="kpi-label" style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Delivered</span>
               </div>
-              <div className="kpi-value" style={{ fontSize: '1.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{dashboard.kpis.delivered}</div>
+              <div className="kpi-value" style={{ fontSize: '28px', fontWeight: 700, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{dashboard.kpis.delivered}</div>
               <div className="kpi-context" style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>of {dashboard.kpis.totalPatients} patients</div>
             </Card>
-            <Card style={{ padding: '0.75rem 1rem', height: '100px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <Card style={{ padding: '12px', height: '92px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                <span style={{ fontSize: '1.2rem' }}>🚑</span>
-                <span className="kpi-label" style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>In Transit</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{color: 'var(--text-muted)'}}><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+                <span className="kpi-label" style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--text-muted)' }}>In Transit</span>
               </div>
-              <div className="kpi-value" style={{ fontSize: '1.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{dashboard.kpis.onboard}</div>
+              <div className="kpi-value" style={{ fontSize: '28px', fontWeight: 700, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{dashboard.kpis.onboard}</div>
               <div className="kpi-context" style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>across fleet</div>
             </Card>
-            <Card style={{ padding: '0.75rem 1rem', height: '100px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <Card style={{ padding: '12px', height: '92px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                <span style={{ fontSize: '1.2rem' }}>⏳</span>
-                <span className="kpi-label" style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Waiting</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{color: 'var(--text-muted)'}}><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>
+                <span className="kpi-label" style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Waiting</span>
               </div>
-              <div className="kpi-value" style={{ fontSize: '1.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{dashboard.kpis.waiting}</div>
+              <div className="kpi-value" style={{ fontSize: '28px', fontWeight: 700, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{dashboard.kpis.waiting}</div>
               <div className="kpi-context" style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{dashboard.kpis.assigned} assigned</div>
             </Card>
-            <Card style={{ padding: '0.75rem 1rem', height: '100px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <Card style={{ padding: '12px', height: '92px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                <span style={{ fontSize: '1.2rem' }}>⚠️</span>
-                <span className="kpi-label" style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Shortfalls</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{color: dashboard.kpis.deliveredShort > 0 ? 'var(--error)' : 'var(--text-muted)'}}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <span className="kpi-label" style={{ fontSize: '12px', textTransform: 'uppercase', color: dashboard.kpis.deliveredShort > 0 ? 'var(--error)' : 'var(--text-muted)' }}>Shortfalls</span>
               </div>
-              <div className="kpi-value" style={{ fontSize: '1.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', lineHeight: 1, color: dashboard.kpis.deliveredShort > 0 ? 'var(--error)' : 'inherit' }}>{dashboard.kpis.deliveredShort}</div>
+              <div className="kpi-value" style={{ fontSize: '28px', fontWeight: 700, fontVariantNumeric: 'tabular-nums', lineHeight: 1, color: dashboard.kpis.deliveredShort > 0 ? 'var(--error)' : 'inherit' }}>{dashboard.kpis.deliveredShort}</div>
               <div className="kpi-context" style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>affected patients</div>
             </Card>
-            <Card style={{ padding: '0.75rem 1rem', height: '100px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <Card style={{ padding: '12px', height: '92px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                <span style={{ fontSize: '1.2rem' }}>🔄</span>
-                <span className="kpi-label" style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Reroutes</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{color: 'var(--text-muted)'}}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                <span className="kpi-label" style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Reroutes</span>
               </div>
-              <div className="kpi-value" style={{ fontSize: '1.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{dashboard.kpis.reroutes}</div>
+              <div className="kpi-value" style={{ fontSize: '28px', fontWeight: 700, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{dashboard.kpis.reroutes}</div>
               <div className="kpi-context" style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{dashboard.kpis.lastRerouteTime !== null ? `last: T+${time(dashboard.kpis.lastRerouteTime)}` : 'none'}</div>
             </Card>
           </div>
@@ -657,7 +669,7 @@ export const SimulationView: React.FC<{
         <div className="grid-12">
           {/* Map Column */}
           <div className="col-map">
-            <div className="card sim-map-col" style={{ padding: 0, overflow: 'hidden', position: 'relative', height: 'clamp(460px, 72vh, 700px)', display: 'flex', flexDirection: 'column' }}>
+            <div className="card sim-map-col" style={{ padding: 0, overflow: 'hidden', position: 'relative', height: 'var(--sim-h, clamp(460px, 72vh, 700px))', display: 'flex', flexDirection: 'column' }}>
               <MapContainer
                 bounds={mapPoints.bounds || undefined}
                 center={!mapPoints.bounds && mapPoints.incident ? [mapPoints.incident.lat, mapPoints.incident.lng] : undefined}
@@ -711,10 +723,10 @@ export const SimulationView: React.FC<{
 
           {/* Side Panel Column */}
           <div className="col-side">
-            <Card style={{ height: 'clamp(460px, 72vh, 700px)', padding: '1rem', display: 'flex', flexDirection: 'column' }} bodyClassName="sim-dash-col" >
+            <Card fill style={{ height: 'var(--sim-h, clamp(460px, 72vh, 700px))', padding: '1rem', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }} bodyClassName="sim-dash-col" >
               {/* Compact fleet strip */}
               {dashboard && (
-                <div style={{ display: 'grid', gridTemplateColumns: dashboard.ambulances.length > 4 ? '1fr 1fr' : '1fr', gap: '0.25rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1rem', flexShrink: 0 }}>
+                <div style={{ flex: 'none', display: 'grid', gridTemplateColumns: dashboard.ambulances.length > 6 ? '1fr 1fr' : '1fr', gap: '0.25rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1rem' }}>
                   {dashboard.ambulances.map(a => {
                     let text = 'idle';
                     if (a.statusSentence.startsWith('en route to ')) {
@@ -730,8 +742,13 @@ export const SimulationView: React.FC<{
                       text = a.statusSentence;
                     }
                     return (
-                      <div key={a.id} title={`${a.label}: ${a.statusSentence}`} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.8rem', padding: '0.2rem 0' }}>
-                        <span>🚑</span>
+                      <div key={a.id} title={`${a.label}: ${a.statusSentence}`} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.8rem', padding: '2px 0' }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{flexShrink: 0}}>
+                          <rect x="1" y="3" width="15" height="13"></rect>
+                          <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+                          <circle cx="5.5" cy="18.5" r="2.5"></circle>
+                          <circle cx="18.5" cy="18.5" r="2.5"></circle>
+                        </svg>
                         <strong style={{ flexShrink: 0 }}>{a.label}</strong>
                         <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{text}</span>
                       </div>
@@ -741,41 +758,77 @@ export const SimulationView: React.FC<{
               )}
 
               {/* Tabs */}
-              <div role="tablist" className="custom-tablist" aria-label="Simulation details" style={{ flexShrink: 0 }}>
+              <div 
+                role="tablist" 
+                className="custom-tablist" 
+                aria-label="Simulation details" 
+                onKeyDown={(e) => {
+                  const tabOrder: Array<'log' | 'comparison' | 'audit'> = ['log', 'comparison', 'audit'];
+                  const currentIndex = tabOrder.indexOf(tab);
+                  if (currentIndex === -1) return;
+                  let nextIndex = currentIndex;
+                  if (e.key === 'ArrowRight') {
+                    nextIndex = (currentIndex + 1) % tabOrder.length;
+                  } else if (e.key === 'ArrowLeft') {
+                    nextIndex = (currentIndex - 1 + tabOrder.length) % tabOrder.length;
+                  } else if (e.key === 'Home') {
+                    nextIndex = 0;
+                  } else if (e.key === 'End') {
+                    nextIndex = tabOrder.length - 1;
+                  } else {
+                    return;
+                  }
+                  e.preventDefault();
+                  const nextTab = tabOrder[nextIndex];
+                  setTab(nextTab);
+                  const tabEl = document.getElementById(`tab-${nextTab}`);
+                  if (tabEl) tabEl.focus();
+                }}
+                style={{ flex: 'none', display: 'flex', overflowX: 'auto', paddingBottom: '4px' }}
+              >
                 <button 
+                  id="tab-log"
                   role="tab" 
+                  aria-controls="tabpanel-log"
                   className="custom-tab" 
                   aria-selected={tab === 'log'}
+                  tabIndex={tab === 'log' ? 0 : -1}
                   onClick={() => setTab('log')}
-                  style={{ whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}
+                  style={{ whiteSpace: 'nowrap', flex: 1, fontSize: '13px', padding: '8px' }}
                 >
                   Decision log
                 </button>
                 <button 
+                  id="tab-comparison"
                   role="tab" 
+                  aria-controls="tabpanel-comparison"
                   className="custom-tab" 
                   aria-selected={tab === 'comparison'}
+                  tabIndex={tab === 'comparison' ? 0 : -1}
                   onClick={() => setTab('comparison')}
-                  style={{ whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}
+                  style={{ whiteSpace: 'nowrap', flex: 1, fontSize: '13px', padding: '8px' }}
                 >
                   Policy comparison
                 </button>
                 <button 
+                  id="tab-audit"
                   role="tab" 
+                  aria-controls="tabpanel-audit"
                   className="custom-tab" 
                   aria-selected={tab === 'audit'}
+                  tabIndex={tab === 'audit' ? 0 : -1}
                   onClick={() => setTab('audit')}
-                  style={{ whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}
+                  style={{ whiteSpace: 'nowrap', flex: 1, fontSize: '13px', padding: '8px' }}
                 >
                   Ledger tools
                 </button>
               </div>
 
               {/* Tab Content */}
-              <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              <div className="tab-panel-container overflow-y-auto" style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
                 {tab === 'log' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.5rem', flexShrink: 0 }}>
+                  <div style={{ paddingBottom: '3rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.5rem', flexShrink: 0, position: 'sticky', top: 0, background: 'var(--bg-card)', zIndex: 10, padding: '0.5rem 0', borderBottom: '1px solid var(--border-color)' }}>
                       <h3 style={{ fontSize: '1rem', margin: 0 }}>Decision Log</h3>
                       {dashboard && (
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
@@ -787,7 +840,7 @@ export const SimulationView: React.FC<{
                     <div
                       ref={logContainerRef}
                       onScroll={handleLogScroll}
-                      style={{ flex: 1, overflowY: 'auto', background: 'var(--bg-input)', borderRadius: '8px', padding: '0.5rem', fontSize: '0.85rem' }}
+                      style={{ background: 'var(--bg-input)', borderRadius: '8px', padding: '0.5rem', fontSize: '0.85rem' }}
                       aria-live="polite"
                     >
                       {displayEntries.map(e => {
@@ -828,7 +881,7 @@ export const SimulationView: React.FC<{
                 )}
 
                 {tab === 'comparison' && (
-                  <div style={{ flex: 1, overflowY: 'auto' }}>
+                  <div style={{ paddingBottom: '2rem' }}>
                     {!compareResult && !comparing && (
                       <div className="empty-state">
                         Click "Compare policies" in the command bar to run a headless baseline comparison.
@@ -846,60 +899,70 @@ export const SimulationView: React.FC<{
                           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>Differences reflect severity-first ordering and stock-aware choice.</p>
                           <button onClick={() => setCompareResult(null)} className="btn btn-secondary" style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem', borderRadius: '4px' }}>Clear</button>
                         </div>
-                        <div style={{ overflowX: 'auto' }}>
-                          <table style={{ width: '100%', minWidth: '350px', fontSize: '0.85rem', borderCollapse: 'collapse', textAlign: 'left' }}>
-                            <thead>
-                              <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
-                                <th style={{ padding: '0.75rem 0.5rem', color: 'var(--text-muted)' }}>Metric</th>
-                                <th style={{ padding: '0.75rem 0.5rem', color: 'var(--text-muted)', width: '35%' }}>Resource-aware</th>
-                                <th style={{ padding: '0.75rem 0.5rem', color: 'var(--text-muted)', width: '35%' }}>Baseline</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {(() => {
-                                const renderRow = (label: string, valR: number | null, valB: number | null, fmt: (v: number) => string, invertGood = false) => {
-                                  if (valR === null || valB === null) return (
-                                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                      <td style={{ padding: '0.75rem 0.5rem' }}>{label}</td>
-                                      <td style={{ padding: '0.75rem 0.5rem' }}>N/A</td>
-                                      <td style={{ padding: '0.75rem 0.5rem' }}>N/A</td>
-                                    </tr>
-                                  );
-                                  const max = Math.max(valR, valB, 1);
-                                  const pctR = (valR / max) * 100;
-                                  const pctB = (valB / max) * 100;
-                                  const betterR = invertGood ? valR > valB : valR < valB;
-                                  const betterB = invertGood ? valB > valR : valB < valR;
-                                  return (
-                                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                      <td style={{ padding: '0.75rem 0.5rem' }}>{label}</td>
-                                      <td style={{ padding: '0.75rem 0.5rem', fontVariantNumeric: 'tabular-nums' }}>
-                                        <div style={{ marginBottom: '4px', color: betterR ? 'var(--success)' : (valR === valB ? 'inherit' : 'var(--warning)') }}>{fmt(valR)}</div>
-                                        <div style={{ height: '4px', background: 'var(--bg-card-border)', borderRadius: '2px', overflow: 'hidden' }}>
-                                          <div style={{ height: '100%', width: `${pctR}%`, background: 'currentColor' }}></div>
-                                        </div>
-                                      </td>
-                                      <td style={{ padding: '0.75rem 0.5rem', fontVariantNumeric: 'tabular-nums' }}>
-                                        <div style={{ marginBottom: '4px', color: betterB ? 'var(--success)' : (valR === valB ? 'inherit' : 'var(--warning)') }}>{fmt(valB)}</div>
-                                        <div style={{ height: '4px', background: 'var(--bg-card-border)', borderRadius: '2px', overflow: 'hidden' }}>
-                                          <div style={{ height: '100%', width: `${pctB}%`, background: 'currentColor' }}></div>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  );
-                                };
-                                return (
-                                  <>
-                                    {renderRow('Mean time to hospital, high-priority', compareResult.resource_aware.meanHighPriorityDeliverySeconds, compareResult.baseline.meanHighPriorityDeliverySeconds, (v) => time(Math.round(v)))}
-                                    {renderRow('Patients delivered short of required stock', compareResult.resource_aware.underResourcedCount, compareResult.baseline.underResourcedCount, (v) => v.toString())}
-                                    {renderRow('Simulated elapsed', compareResult.resource_aware.simulatedSeconds, compareResult.baseline.simulatedSeconds, (v) => time(Math.round(v)))}
-                                    {renderRow('Completed trips', compareResult.resource_aware.completedTrips, compareResult.baseline.completedTrips, (v) => v.toString(), true)}
-                                  </>
-                                );
-                              })()}
-                            </tbody>
-                          </table>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                          {(() => {
+                            const renderBlock = (label: string, valR: number | null, valB: number | null, fmt: (v: number) => string, invertGood = false) => {
+                              if (valR === null || valB === null) return null;
+                              const max = Math.max(valR, valB, 1);
+                              const pctR = (valR / max) * 100;
+                              const pctB = (valB / max) * 100;
+                              const betterR = invertGood ? valR > valB : valR < valB;
+                              const betterB = invertGood ? valB > valR : valB < valR;
+                              return (
+                                <div style={{ border: '1px solid var(--border-color)', borderRadius: '6px', padding: '0.75rem' }}>
+                                  <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.75rem' }}>{label}</div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                      <div style={{ width: '95px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Resource-aware</div>
+                                      <div style={{ flex: 1, height: '6px', background: 'var(--bg-card-border)', borderRadius: '3px', overflow: 'hidden' }}>
+                                        <div style={{ height: '100%', width: `${pctR}%`, background: betterR ? 'var(--success)' : (valR === valB ? 'var(--text-muted)' : 'var(--warning)') }}></div>
+                                      </div>
+                                      <div style={{ width: '45px', textAlign: 'right', fontSize: '0.8rem', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmt(valR)}</div>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                      <div style={{ width: '95px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Baseline</div>
+                                      <div style={{ flex: 1, height: '6px', background: 'var(--bg-card-border)', borderRadius: '3px', overflow: 'hidden' }}>
+                                        <div style={{ height: '100%', width: `${pctB}%`, background: betterB ? 'var(--success)' : (valR === valB ? 'var(--text-muted)' : 'var(--warning)') }}></div>
+                                      </div>
+                                      <div style={{ width: '45px', textAlign: 'right', fontSize: '0.8rem', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmt(valB)}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            };
+                            return (
+                              <>
+                                {renderBlock('Mean time to hospital, high-priority patients', compareResult.resource_aware.meanHighPriorityDeliverySeconds, compareResult.baseline.meanHighPriorityDeliverySeconds, (v) => time(Math.round(v)))}
+                                {renderBlock('Patients delivered to a hospital short of required stock', compareResult.resource_aware.underResourcedCount, compareResult.baseline.underResourcedCount, (v) => v.toString())}
+                                {renderBlock('Simulated elapsed', compareResult.resource_aware.simulatedSeconds, compareResult.baseline.simulatedSeconds, (v) => time(Math.round(v)))}
+                                {renderBlock('Completed trips', compareResult.resource_aware.completedTrips, compareResult.baseline.completedTrips, (v) => v.toString(), true)}
+                              </>
+                            );
+                          })()}
                         </div>
+                        {(() => {
+                          const rMean = compareResult.resource_aware.meanHighPriorityDeliverySeconds;
+                          const bMean = compareResult.baseline.meanHighPriorityDeliverySeconds;
+                          const rShort = compareResult.resource_aware.underResourcedCount;
+                          const bShort = compareResult.baseline.underResourcedCount;
+                          if (rMean !== null && bMean !== null && rShort !== null && bShort !== null) {
+                            if (bMean < rMean && rShort < bShort) {
+                              return (
+                                <p style={{ fontSize: '0.8rem', color: 'var(--text-main)', marginTop: '1rem', background: 'rgba(255,255,255,0.05)', padding: '0.5rem', borderRadius: '4px' }}>
+                                  Baseline was faster on high-priority mean time, but delivered {bShort - rShort} more patients to a hospital short of required stock.
+                                </p>
+                              );
+                            }
+                            if (rMean < bMean && rShort < bShort) {
+                              return (
+                                <p style={{ fontSize: '0.8rem', color: 'var(--text-main)', marginTop: '1rem', background: 'rgba(255,255,255,0.05)', padding: '0.5rem', borderRadius: '4px' }}>
+                                  Resource-aware was both faster for high-priority patients and delivered fewer patients to unstocked hospitals.
+                                </p>
+                              );
+                            }
+                          }
+                          return null;
+                        })()}
                         <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '1rem', fontStyle: 'italic' }}>
                           One synthetic scenario on the Vile Parle graph. Not a general or clinical claim.
                         </p>
@@ -909,7 +972,7 @@ export const SimulationView: React.FC<{
                 )}
 
                 {tab === 'audit' && (
-                  <div style={{ flex: 1, overflowY: 'auto' }}>
+                  <div style={{ paddingBottom: '3rem' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                       <div className="card" style={{ padding: '1rem', background: 'var(--bg-input)' }}>
                         <h4 style={{ margin: '0 0 0.5rem 0' }}>Log State</h4>
@@ -950,7 +1013,7 @@ export const SimulationView: React.FC<{
                       {verifyResult && (
                         <div className={`alert ${verifyResult.ok ? 'alert-success' : 'alert-error'}`} style={{ marginTop: '1rem', wordBreak: 'break-all' }}>
                           {verifyResult.ok 
-                            ? ((verifyResult as any).verifiedCount !== ledgerEntries.length ? `Verified ${(verifyResult as any).verifiedCount} of ${ledgerEntries.length} entries. Verify again.` : `✓ ${verifyResult.count} entries verified, chain intact`) 
+                            ? ((verifyResult as any).verifiedCount !== ledgerEntries.length ? `Verified ${(verifyResult as any).verifiedCount} of ${ledgerEntries.length} entries. Verify again.` : `Verified ${verifyResult.count} entries, chain intact`) 
                             : failureReport(verifyResult)}
                         </div>
                       )}
@@ -964,9 +1027,9 @@ export const SimulationView: React.FC<{
 
         {/* 4. Analytics row */}
         {dashboard && (
-          <div className="grid-12" style={{ alignItems: 'start' }}>
+          <div className="analytics-grid">
             {/* Hospital Inventory */}
-            <div className="col-analytics">
+            <div className="hospital-panel">
               <Card style={{ height: '100%' }}>
                 <div className="card-header">
                   <h3 className="card-title">Hospital Inventory</h3>
@@ -1005,11 +1068,11 @@ export const SimulationView: React.FC<{
                                     <div style={{ width: '45px', color: 'var(--text-muted)' }}>{item.key}</div>
                                     <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                       {r.initial === 0 ? (
-                                        <span style={{ color: 'var(--text-dim)' }}>0 / 0</span>
+                                        <span style={{ color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>0 / 0</span>
                                       ) : (
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                          <span style={{ width: '40px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.remaining} / {r.initial}</span>
-                                          <span style={{ color: 'var(--text-dim)', fontSize: '0.65rem' }}>{r.reserved > 0 ? `res ${r.reserved}` : ''} {r.consumed > 0 ? `use ${r.consumed}` : ''}</span>
+                                          <span style={{ width: '45px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{r.remaining} / {r.initial}</span>
+                                          <span style={{ color: 'var(--text-dim)', fontSize: '0.65rem', whiteSpace: 'nowrap' }}>{r.reserved > 0 ? `res ${r.reserved}` : ''} {r.consumed > 0 ? `use ${r.consumed}` : ''}</span>
                                         </div>
                                       )}
                                       <span style={{ 
@@ -1036,7 +1099,7 @@ export const SimulationView: React.FC<{
             </div>
 
             {/* Patients by Injury */}
-            <div className="col-analytics">
+            <div className="patients-panel">
               <Card style={{ height: '100%' }}>
                 <div className="card-header">
                   <div className="card-title-area">
@@ -1047,12 +1110,20 @@ export const SimulationView: React.FC<{
                   </div>
                 </div>
                 <div className="card-body">
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {/* Legend for pipeline */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: 'var(--success)', borderRadius: '2px' }}></span> Delivered</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: 'var(--error)', borderRadius: '2px' }}></span> Short</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: 'var(--primary)', borderRadius: '2px' }}></span> On board</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: '#8b5cf6', borderRadius: '2px' }}></span> Assigned</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: 'var(--warning)', borderRadius: '2px' }}></span> Waiting</div>
+                    </div>
                     {dashboard.patients.map(p => {
                       if (p.total === 0) return null;
                       return (
                         <div key={p.type}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.85rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem', fontSize: '0.85rem' }}>
                             <strong style={{ textTransform: 'capitalize' }}>{p.type.replace('_', ' ')}</strong>
                             <span style={{ color: 'var(--text-muted)' }}>{p.total} total</span>
                           </div>
@@ -1064,15 +1135,6 @@ export const SimulationView: React.FC<{
                             {p.assigned > 0 && <div className="pipeline-segment" style={{ width: `${(p.assigned / p.total)*100}%`, background: '#8b5cf6' }} title={`Assigned: ${p.assigned}`}>{p.assigned > p.total * 0.1 ? p.assigned : ''}</div>}
                             {p.waiting > 0 && <div className="pipeline-segment" style={{ width: `${(p.waiting / p.total)*100}%`, background: 'var(--warning)' }} title={`Waiting: ${p.waiting}`}>{p.waiting > p.total * 0.1 ? p.waiting : ''}</div>}
                           </div>
-                          
-                          {/* Legend for pipeline */}
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: 'var(--success)', borderRadius: '2px' }}></span> Delivered</div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: 'var(--error)', borderRadius: '2px' }}></span> Short</div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: 'var(--primary)', borderRadius: '2px' }}></span> On board</div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: '#8b5cf6', borderRadius: '2px' }}></span> Assigned</div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ width: '8px', height: '8px', background: 'var(--warning)', borderRadius: '2px' }}></span> Waiting</div>
-                          </div>
                         </div>
                       );
                     })}
@@ -1082,7 +1144,7 @@ export const SimulationView: React.FC<{
             </div>
 
             {/* Deliveries over time */}
-            <div className="col-analytics">
+            <div className="deliveries-panel">
               <Card style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <div className="card-header">
                   <h3 className="card-title">Deliveries over Time</h3>
@@ -1100,7 +1162,7 @@ export const SimulationView: React.FC<{
                     if (state) data.push({ x: state.simSeconds, y: accumulated });
                     
                     return (
-                      <div style={{ width: '100%', height: '100%' }}>
+                      <div style={{ width: '100%', height: '100%', aspectRatio: '16/9' }}>
                         <SvgStepChart 
                           data={data} 
                           maxX={Math.max(300, state?.simSeconds || 0)} 
@@ -1119,32 +1181,42 @@ export const SimulationView: React.FC<{
         {/* 5. Ambulance cards row */}
         {dashboard && (
           <div className="ambulance-grid" style={{ marginBottom: '1.5rem', alignItems: 'start' }}>
-            {dashboard.ambulances.map(a => (
-              <Card key={a.id} style={{ padding: '1rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}>
-                  <div style={{ fontSize: '1.75rem' }}>🚑</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '1rem', fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{a.label}</div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{a.statusSentence}</div>
+            {dashboard.ambulances.map(a => {
+              const stateStatus = a.statusSentence.startsWith('stuck') ? 'stuck' : a.statusSentence === 'idle' ? 'idle' : 'active';
+              return (
+                <div key={a.id} className="card" style={{ padding: '0.6rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.75rem', background: 'var(--bg-card)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0 }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{flexShrink: 0, color: stateStatus === 'stuck' ? 'var(--error)' : stateStatus === 'idle' ? 'var(--text-muted)' : 'var(--primary)'}}>
+                        <rect x="1" y="3" width="15" height="13"></rect>
+                        <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+                        <circle cx="5.5" cy="18.5" r="2.5"></circle>
+                        <circle cx="18.5" cy="18.5" r="2.5"></circle>
+                      </svg>
+                      <strong style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.85rem' }}>{a.label}</strong>
+                    </div>
+                    <span style={{ 
+                      padding: '1px 4px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', fontSize: '0.6rem', textTransform: 'uppercase', flexShrink: 0,
+                      color: stateStatus === 'stuck' ? 'var(--error)' : stateStatus === 'idle' ? 'var(--text-muted)' : 'var(--primary)'
+                    }}>
+                      {stateStatus}
+                    </span>
+                  </div>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)' }}>
+                    <span>Load {a.onboard}/{a.capacity}</span>
+                    <div style={{ flex: 1, background: 'var(--bg-input)', height: '4px', borderRadius: '2px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${(a.onboard / a.capacity) * 100}%`, background: 'var(--primary)' }} />
+                    </div>
+                  </div>
+                  
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <span>Trips {a.tripsCompleted}</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.destinationName ? `· ${a.destinationName}` : ''}</span>
                   </div>
                 </div>
-                
-                <div className="hospital-bar-wrapper" style={{ marginBottom: '0.75rem' }}>
-                  <div className="hospital-bar-header">
-                    <span className="hospital-bar-title" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Load</span>
-                    <span className="hospital-bar-stats">{a.onboard}/{a.capacity}</span>
-                  </div>
-                  <div className="hospital-bar-track" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                    <div className="hospital-bar-fill" style={{ width: `${(a.onboard / a.capacity) * 100}%`, background: 'var(--primary)' }} />
-                  </div>
-                </div>
-                
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-dim)' }}>
-                  <div>Trips: {a.tripsCompleted}</div>
-                  {a.destinationName && <div>To: {a.destinationName}</div>}
-                </div>
-              </Card>
-            ))}
+              );
+            })}
           </div>
         )}
 
