@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Polyline, useMap, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import type { Scenario, Hospital, Ambulance } from '../lib/types';
 import { buildSimInput, createRun } from '../sim/adapter';
@@ -10,9 +10,9 @@ import { computeCollocationOffset, getMapPoints } from '../lib/map-utils';
 import { buildDisplayNameMaps, describeEvent, isKeyEvent } from '../lib/event-display';
 import { RoadLayer } from '../components/RoadLayer';
 import { createLedger, verifyChain, failureReport, time, type Ledger, type LedgerEntry, type VerifyResult } from '../lib/audit';
-import { getAmbulanceStatus } from '../lib/fleet-status';
 import { drainEventsToLedger } from '../lib/ledger-feed';
 import { extractLiveView, type LiveView } from '../lib/live-view';
+import { buildDashboardView, groupCoLocatedAmbulances, type DashboardView } from '../lib/dashboard-view';
 
 const PLAYBACK_RATE_NORMAL = 20;
 
@@ -52,11 +52,11 @@ function getIncidentIcon() {
 
 /* ─────────────────── MapRefit component ─────────────────────────────────── */
 
-function MapRefit({ bounds }: { bounds: L.LatLngBoundsExpression | null }) {
+function MapRefit({ bounds, trigger }: { bounds: L.LatLngBoundsExpression | null, trigger: number }) {
   const map = useMap();
   useEffect(() => {
     if (bounds) map.fitBounds(bounds, { padding: [30, 30] });
-  }, [bounds, map]);
+  }, [bounds, map, trigger]);
 
   // Fix map grey area: invalidate size on container resize
   useEffect(() => {
@@ -108,6 +108,15 @@ function AmbulanceLayer({
         const interpolationFraction = (playingRef.current && !isResolved) ? Math.min(1, accRef.current / msPerTick) : 0;
         
         const mapPoints = getMapPoints(simInput, st, roadGraph, interpolationFraction);
+        const groups = groupCoLocatedAmbulances(mapPoints.ambulances, map.getZoom(), 14);
+        
+        // Map ambulance to its group for easy lookup
+        const ambToGroup = new Map<string, any>();
+        for (const g of groups) {
+          for (let i = 0; i < g.group.length; i++) {
+            ambToGroup.set(g.group[i].id, { group: g, idx: i });
+          }
+        }
         
         mapPoints.ambulances.forEach(item => {
            const marker = markersRef.current[item.ambulance.id];
@@ -124,25 +133,39 @@ function AmbulanceLayer({
                  }
                  
                  const textContainer = el.querySelector('.amb-text-container') as HTMLElement;
+                 const groupInfo = ambToGroup.get(item.ambulance.id);
+                 
                  if (textContainer) {
-                    const onboard = item.ambulance.cargo.reduce((sum: number, g: any) => sum + g.count, 0);
-                    const label = item.ambulance.label;
-                    const short = label.length > 8 ? label.slice(0, 8) + '…' : label;
-                    textContainer.innerHTML = `${short}&nbsp;·&nbsp;${onboard}/${item.ambulance.capacity}`;
+                   if (groupInfo && groupInfo.idx > 0) {
+                     textContainer.style.display = 'none';
+                   } else {
+                     textContainer.style.display = 'block';
+                     if (groupInfo && groupInfo.group.group.length > 1) {
+                       const labels = groupInfo.group.group.map((gItem: any) => {
+                         const onboard = gItem.ambulance.cargo.reduce((sum: number, g: any) => sum + g.count, 0);
+                         const label = gItem.ambulance.label;
+                         const short = label.length > 8 ? label.slice(0, 8) + '…' : label;
+                         return `${short} ${onboard}/${gItem.ambulance.capacity}`;
+                       });
+                       textContainer.innerHTML = labels.join('&nbsp;·&nbsp;');
+                     } else {
+                       const onboard = item.ambulance.cargo.reduce((sum: number, g: any) => sum + g.count, 0);
+                       const label = item.ambulance.label;
+                       const short = label.length > 8 ? label.slice(0, 8) + '…' : label;
+                       textContainer.innerHTML = `${short}&nbsp;·&nbsp;${onboard}/${item.ambulance.capacity}`;
+                     }
+                   }
                  }
 
                  const wrapper = el.querySelector('.amb-wrapper') as HTMLElement;
                  if (wrapper) {
-                    const collocated = mapPoints.ambulances.filter(o =>
-                      o.ambulance.currentNode === item.ambulance.currentNode
-                    ).sort((x, y) => x.id.localeCompare(y.id));
-                    const idx = collocated.findIndex(x => x.id === item.ambulance.id);
                     let edgeDirX = 1, edgeDirY = 0;
                     if (item.ambulance.currentPath.length >= 2 && roadGraph?.nodes) {
                       const n1 = roadGraph.nodes[item.ambulance.currentPath[0]];
                       const n2 = roadGraph.nodes[item.ambulance.currentPath[1]];
                       if (n1 && n2) { edgeDirX = n2.lng - n1.lng; edgeDirY = n2.lat - n1.lat; }
                     }
+                    const idx = groupInfo ? groupInfo.idx : 0;
                     const offset = computeCollocationOffset(idx, edgeDirX, edgeDirY);
                     wrapper.style.transform = `translate(${offset.dx}px,${offset.dy}px)`;
                  }
@@ -216,6 +239,7 @@ export const SimulationView: React.FC<{
   const [engine, setEngine] = useState<SimEngine | null>(null);
   const [state, setState] = useState<SimState | null>(null);
   const [liveView, setLiveView] = useState<LiveView | null>(null);
+  const [dashboard, setDashboard] = useState<DashboardView | null>(null);
 
   // Ledger state
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
@@ -227,7 +251,7 @@ export const SimulationView: React.FC<{
   const [playing, setPlaying] = useState<boolean>(false);
   const [autoScrollLog, setAutoScrollLog] = useState(true);
   const [showSnapshots, setShowSnapshots] = useState(false);
-  const [refitCounter, setRefitCounter] = useState(0);
+  const [refitCounter, setRefitCounter] = useState(1);
   const [isDemoMode, setIsDemoMode] = useState(false);
   
   const [comparing, setComparing] = useState(false);
@@ -240,12 +264,14 @@ export const SimulationView: React.FC<{
   
   const engineRef = useRef<SimEngine | null>(null);
   const stateRef = useRef<SimState | null>(null);
+  const simInputRef = useRef<any>(null);
   const playingRef = useRef(false);
   const speedRef = useRef(1);
   const lastUpdateRef = useRef<number>(0);
 
   useEffect(() => { engineRef.current = engine; }, [engine]);
   useEffect(() => { stateRef.current = state; }, [state]);
+  useEffect(() => { simInputRef.current = simInput; }, [simInput]);
   useEffect(() => { playingRef.current = playing; }, [playing]);
   useEffect(() => { speedRef.current = playbackSpeed; }, [playbackSpeed]);
   
@@ -282,6 +308,7 @@ export const SimulationView: React.FC<{
       setEngine(simEngine);
       setState(initialRun);
       setLiveView(extractLiveView(initialRun));
+      setDashboard(buildDashboardView(initialRun, input));
       setPlaying(false);
       
       // Initialize Ledger
@@ -305,6 +332,7 @@ export const SimulationView: React.FC<{
     setEngine(freshEngine);
     setState(freshRun);
     setLiveView(extractLiveView(freshRun));
+    setDashboard(buildDashboardView(freshRun, simInput));
     accRef.current = 0;
     lastTimeRef.current = undefined;
     
@@ -340,12 +368,14 @@ export const SimulationView: React.FC<{
       // Throttle UI updates to ~10fps
       if (time - lastUpdateRef.current > 100) {
         setLiveView(extractLiveView(st));
+        if (simInputRef.current) setDashboard(buildDashboardView(st, simInputRef.current));
         lastUpdateRef.current = time;
       }
 
       if ((st.status as string) === 'resolved') {
         setPlaying(false);
         setLiveView(extractLiveView(st)); // final update
+        if (simInputRef.current) setDashboard(buildDashboardView(st, simInputRef.current));
         if (autoScrollLog) {
           setTimeout(() => {
             if (logContainerRef.current) logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
@@ -382,8 +412,11 @@ export const SimulationView: React.FC<{
   };
 
   useEffect(() => {
-    if (liveView?.status === 'resolved' && ledgerRef.current && !verifyResult) {
-      handleVerify();
+    if (liveView?.status === 'resolved') {
+      setRefitCounter(c => c + 1);
+      if (ledgerRef.current && !verifyResult) {
+        handleVerify();
+      }
     }
   }, [liveView?.status]);
 
@@ -449,11 +482,26 @@ export const SimulationView: React.FC<{
     
     try {
       const { runPolicyComparison } = await import('../lib/compare');
-      const res = runPolicyComparison(scenario, hospitals, ambulances, roadGraph);
+      const res = await Promise.race([
+        new Promise<any>((resolve, reject) => {
+          setTimeout(() => {
+            try {
+              resolve(runPolicyComparison(scenario, hospitals, ambulances, roadGraph));
+            } catch (e) {
+              reject(e);
+            }
+          }, 0);
+        }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Comparison timed out")), 20000))
+      ]);
+      
+      if (!res.ok) {
+        throw new Error(res.reason);
+      }
       setCompareResult(res);
-    } catch (e) {
-      console.error(e);
-      alert('Comparison failed: ' + String(e));
+    } catch (e: any) {
+      console.error('compare error', e);
+      alert('Comparison failed: ' + (e.message || String(e)));
     } finally {
       setComparing(false);
     }
@@ -587,11 +635,110 @@ export const SimulationView: React.FC<{
             max-height: 360px;
           }
         }
+        
+        /* Dashboard Cards CSS */
+        .kpi-tile {
+          text-align: center;
+          padding: 6px;
+          background: rgba(0,0,0,0.02);
+          border-radius: 6px;
+          border: 1px solid rgba(0,0,0,0.05);
+        }
+        .kpi-val {
+          font-size: 1.1rem;
+          font-weight: 700;
+          font-variant-numeric: tabular-nums;
+        }
+        .kpi-lbl {
+          font-size: 0.65rem;
+          color: var(--text-muted);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-top: 2px;
+        }
+        .dash-row {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+          gap: 16px;
+          margin-top: 20px;
+        }
+        .inv-bar-wrap {
+          display: flex;
+          align-items: center;
+          margin-bottom: 8px;
+        }
+        .inv-bar-lbl {
+          width: 50px;
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: var(--text-dim);
+        }
+        .inv-bar-track {
+          flex: 1;
+          height: 6px;
+          background: #e2e8f0;
+          border-radius: 3px;
+          margin: 0 10px;
+          position: relative;
+          overflow: hidden;
+        }
+        .inv-bar-fill {
+          height: 100%;
+          background: var(--primary);
+          transition: width 0.3s ease;
+        }
+        .inv-bar-fill.low { background: #f59e0b; }
+        .inv-bar-fill.empty { background: #ef4444; }
+        .inv-bar-val {
+          width: 40px;
+          font-size: 0.75rem;
+          text-align: right;
+          font-variant-numeric: tabular-nums;
+        }
+        .inv-reserved {
+          font-size: 0.65rem;
+          color: #d97706;
+          margin-left: 6px;
+          background: #fef3c7;
+          padding: 1px 4px;
+          border-radius: 4px;
+        }
       `}</style>
       <div className="sim-layout-grid">
 
         {/* ──── Map Column ──── */}
-        <div className="sim-map-col card" style={{ padding: 0, overflow: 'hidden', position: 'relative' }}>
+        <div className="sim-map-col card" style={{ padding: 0, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+          {/* KPI Strip */}
+          {dashboard && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(60px, 1fr))', gap: '8px', padding: '10px', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-color)', zIndex: 10 }}>
+              <div className="kpi-tile">
+                <div className="kpi-val">{dashboard.kpis.simulatedTime}</div>
+                <div className="kpi-lbl">Time</div>
+              </div>
+              <div className="kpi-tile">
+                <div className="kpi-val">{dashboard.kpis.delivered} / {state?.totalPatients || 0}</div>
+                <div className="kpi-lbl">Delivered</div>
+              </div>
+              <div className="kpi-tile">
+                <div className="kpi-val">{dashboard.kpis.inTransit}</div>
+                <div className="kpi-lbl">In Transit</div>
+              </div>
+              <div className="kpi-tile">
+                <div className="kpi-val">{dashboard.kpis.waiting}</div>
+                <div className="kpi-lbl">Waiting</div>
+              </div>
+              <div className="kpi-tile" style={{ color: dashboard.kpis.underResourcedArrivals > 0 ? 'var(--error)' : 'inherit' }}>
+                <div className="kpi-val">{dashboard.kpis.underResourcedArrivals}</div>
+                <div className="kpi-lbl">Shortfall</div>
+              </div>
+              <div className="kpi-tile">
+                <div className="kpi-val">{dashboard.kpis.reroutes}</div>
+                <div className="kpi-lbl">Reroutes</div>
+              </div>
+            </div>
+          )}
+          
+          <div style={{ flex: 1, position: 'relative' }}>
             <MapContainer
               bounds={mapPoints.bounds || undefined}
               center={!mapPoints.bounds && mapPoints.incident ? [mapPoints.incident.lat, mapPoints.incident.lng] : undefined}
@@ -605,7 +752,7 @@ export const SimulationView: React.FC<{
               />
 
               {roadGraph && engine && <RoadLayer graph={roadGraph} engine={engine} />}
-              <MapRefit bounds={refitCounter > 0 ? mapPoints.bounds : null} key={refitCounter} />
+              <MapRefit bounds={mapPoints.bounds} trigger={refitCounter} />
 
               {/* Active routes */}
               {mapPoints.activeRoutes.map(route => (
@@ -620,8 +767,23 @@ export const SimulationView: React.FC<{
 
               {/* Hospitals */}
               {mapPoints.hospitals.map(h => {
+                const dh = dashboard?.hospitals.find(d => d.id === h.id);
                 return (
-                  <Marker key={h.id} position={[h.point.lat, h.point.lng]} icon={getHospitalIcon()} />
+                  <Marker key={h.id} position={[h.point.lat, h.point.lng]} icon={getHospitalIcon()}>
+                    <Tooltip direction="top" offset={[0, -5]} opacity={1}>
+                      <div style={{ fontSize: '0.75rem', lineHeight: '1.2' }}>
+                        <strong style={{ display: 'block', marginBottom: '2px' }}>{h.name}</strong>
+                        {dh ? (
+                          <>
+                            <div>ICU: {dh.icu.remaining}</div>
+                            <div>Blood: {dh.blood.remaining}</div>
+                            <div>Vent: {dh.vent.remaining}</div>
+                            <div>Beds: {dh.beds.remaining}</div>
+                          </>
+                        ) : 'Loading...'}
+                      </div>
+                    </Tooltip>
+                  </Marker>
                 );
               })}
 
@@ -631,30 +793,11 @@ export const SimulationView: React.FC<{
                 playingRef={playingRef} accRef={accRef} speedRef={speedRef} 
               />
             </MapContainer>
+          </div>
         </div>
 
         {/* ──── Dashboard ──── */}
         <div className="sim-dash-col card" style={{ padding: '0.75rem' }}>
-          {/* Fleet Status */}
-            <h3 style={{ marginBottom: '0.4rem', fontSize: '0.95rem', flexShrink: 0 }}>Fleet Status</h3>
-            <div style={{
-              display: 'grid', 
-              gridTemplateColumns: liveView.ambulances.length > 8 ? '1fr 1fr' : '1fr',
-              gap: '0.35rem', 
-              marginBottom: '0.5rem', 
-              flexShrink: 0,
-              overflowWrap: 'anywhere'
-            }}>
-              {liveView.ambulances.map(a => {
-                const { text, icon, color } = getAmbulanceStatus(a, liveView.simSeconds > 0, displayMaps);
-                return (
-                  <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'var(--bg-elevated)', padding: '0.35rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem', color }}>
-                    <span style={{ fontSize: '1rem' }}>{icon}</span>
-                    <span style={{ overflowWrap: 'anywhere' }}><strong>{a.label}</strong> {text}</span>
-                  </div>
-                );
-              })}
-            </div>
 
             {/* Counters + Log header */}
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.25rem', marginBottom: '0.3rem', flexShrink: 0 }}>
@@ -766,6 +909,88 @@ export const SimulationView: React.FC<{
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '16px', height: '3px', background: '#d97706' }}></div> Partial road</div>
         <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginLeft: 'auto' }}>Red crosses on the basemap are OpenStreetMap places, not scenario hospitals.</div>
       </div>
+
+      {dashboard && (
+        <div className="dash-row">
+          {/* Hospital Inventory */}
+          <div className="card" style={{ gridColumn: '1 / -1', padding: '12px' }}>
+            <h3 style={{ fontSize: '0.95rem', marginBottom: '10px' }}>Hospital Inventory</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+              {dashboard.hospitals.map(h => (
+                <div key={h.id} style={{ padding: '10px', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <strong style={{ fontSize: '0.85rem' }}>{h.name}</strong>
+                    <span style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', background: h.status === 'OK' ? '#dcfce7' : h.status === 'LOW' ? '#fef08a' : '#fee2e2', color: h.status === 'OK' ? '#166534' : h.status === 'LOW' ? '#854d0e' : '#991b1b' }}>
+                      {h.status}
+                    </span>
+                  </div>
+                  {[
+                    { lbl: 'ICU', r: h.icu },
+                    { lbl: 'Blood', r: h.blood },
+                    { lbl: 'Vent', r: h.vent },
+                    { lbl: 'Beds', r: h.beds }
+                  ].map(item => {
+                    const r = item.r;
+                    if (r.initial === 0) return null;
+                    const pct = Math.max(0, Math.min(100, (r.remaining / r.initial) * 100));
+                    const cls = pct === 0 ? 'empty' : pct <= 25 ? 'low' : '';
+                    return (
+                      <div key={item.lbl} className="inv-bar-wrap">
+                        <div className="inv-bar-lbl">{item.lbl}</div>
+                        <div className="inv-bar-track">
+                          <div className={`inv-bar-fill ${cls}`} style={{ width: `${pct}%` }} />
+                        </div>
+                        <div className="inv-bar-val">{r.remaining} / {r.initial}</div>
+                        {r.reserved > 0 && <span className="inv-reserved">res: {r.reserved}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Ambulance Fleet */}
+          <div className="card" style={{ padding: '12px' }}>
+            <h3 style={{ fontSize: '0.95rem', marginBottom: '10px' }}>Ambulance Fleet</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {dashboard.ambulances.map(a => (
+                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', background: 'var(--bg-elevated)', borderRadius: '4px' }}>
+                  <div style={{ fontSize: '1.2rem' }}>🚑</div>
+                  <div style={{ flex: 1, fontSize: '0.8rem', overflowWrap: 'anywhere' }}>
+                    <strong>{a.label}</strong> ({a.onboard}/{a.capacity})<br/>
+                    <span style={{ color: 'var(--text-dim)' }}>{a.statusSentence}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Patients by injury */}
+          <div className="card" style={{ padding: '12px' }}>
+            <h3 style={{ fontSize: '0.95rem', marginBottom: '10px' }}>Patients by Injury</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {dashboard.patients.map(p => {
+                if (p.total === 0) return null;
+                return (
+                  <div key={p.type} style={{ fontSize: '0.75rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <strong style={{ textTransform: 'capitalize' }}>{p.type.replace('_', ' ')}</strong>
+                      <span>{p.total} total</span>
+                    </div>
+                    <div style={{ display: 'flex', height: '14px', borderRadius: '4px', overflow: 'hidden', background: '#e2e8f0' }}>
+                      <div style={{ width: `${(p.delivered / p.total)*100}%`, background: '#22c55e' }} title={`Delivered: ${p.delivered}`} />
+                      <div style={{ width: `${(p.inTransit / p.total)*100}%`, background: '#3b82f6' }} title={`In Transit: ${p.inTransit}`} />
+                      <div style={{ width: `${(p.waiting / p.total)*100}%`, background: '#f59e0b' }} title={`Waiting: ${p.waiting}`} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          
+        </div>
+      )}
 
       {/* ──── Compare Results ──── */}
       {compareResult && (
