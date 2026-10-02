@@ -16,6 +16,7 @@ import { extractLiveView, type LiveView } from '../lib/live-view';
 import { buildDashboardView, groupCoLocatedAmbulances, type DashboardView } from '../lib/dashboard-view';
 import { Card } from '../components/Card';
 import { SvgStepChart } from '../components/SvgStepChart';
+import { buildComparisonNote } from '../lib/compare-note';
 
 const PLAYBACK_RATE_NORMAL = 20;
 
@@ -948,31 +949,25 @@ export const SimulationView: React.FC<{
                           })()}
                         </div>
                         {(() => {
-                          const rMean = compareResult.resource_aware.meanHighPriorityDeliverySeconds;
-                          const bMean = compareResult.baseline.meanHighPriorityDeliverySeconds;
-                          const rShort = compareResult.resource_aware.underResourcedCount;
-                          const bShort = compareResult.baseline.underResourcedCount;
-                          if (rMean !== null && bMean !== null && rShort !== null && bShort !== null) {
-                            if (bMean < rMean && rShort < bShort) {
-                              return (
-                                <p style={{ fontSize: '0.8rem', color: 'var(--text-main)', marginTop: '1rem', background: 'rgba(255,255,255,0.05)', padding: '0.5rem', borderRadius: '4px' }}>
-                                  Baseline was faster on high-priority mean time, but delivered {bShort - rShort} more patients to a hospital short of required stock.
-                                </p>
-                              );
-                            }
-                            if (rMean < bMean && rShort < bShort) {
-                              return (
-                                <p style={{ fontSize: '0.8rem', color: 'var(--text-main)', marginTop: '1rem', background: 'rgba(255,255,255,0.05)', padding: '0.5rem', borderRadius: '4px' }}>
-                                  Resource-aware was both faster for high-priority patients and delivered fewer patients to unstocked hospitals.
-                                </p>
-                              );
-                            }
-                          }
-                          return null;
+                          const note = buildComparisonNote(compareResult);
+                          return (
+                            <div style={{ marginTop: '1rem', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '0.75rem' }}>
+                              <h4 style={{ fontSize: '0.85rem', color: 'var(--primary)', margin: '0 0 0.5rem 0', fontWeight: 600, wordBreak: 'break-word' }}>
+                                {note.headline}
+                              </h4>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                {note.lines.map((line, idx) => (
+                                  <p key={idx} style={{ fontSize: '0.8rem', color: 'var(--text-main)', margin: 0, lineHeight: 1.4, wordBreak: 'break-word' }}>
+                                    {line}
+                                  </p>
+                                ))}
+                              </div>
+                              <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.75rem', marginBottom: 0, fontStyle: 'italic', wordBreak: 'break-word' }}>
+                                {note.disclosure}
+                              </p>
+                            </div>
+                          );
                         })()}
-                        <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '1rem', fontStyle: 'italic' }}>
-                          One synthetic scenario on the Vile Parle graph. Not a general or clinical claim.
-                        </p>
                       </div>
                     )}
                   </div>
