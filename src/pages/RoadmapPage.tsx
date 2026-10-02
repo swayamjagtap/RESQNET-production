@@ -1,50 +1,11 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 import { PageShell, Section } from '../components/PageShell';
 
-export const HomePage: React.FC = () => {
+export const RoadmapPage: React.FC = () => {
   return (
-    <PageShell title="Overview">
-      <h1 className="hero-title" style={{ marginBottom: '2rem' }}>
-        RESQNET: transparent disaster-relief resource allocation
-      </h1>
+    <PageShell title="Roadmap">
+      <h1 className="hero-title" style={{ marginBottom: '2rem' }}>Roadmap</h1>
       
-      <p className="hero-subtitle" style={{ marginBottom: '2rem', fontSize: '1.2rem', lineHeight: '1.6' }}>
-        When a disaster injures many people at once, ambulances, hospital beds, blood and ventilators are limited, roads change, and decisions have to be made quickly. RESQNET is a prototype that shows how those decisions can be made from available resources and road access, and recorded so they can be checked afterwards.
-      </p>
-
-      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '3rem' }}>
-        <Link to="/demo" className="btn btn-primary" style={{ padding: '0.8rem 1.75rem', fontSize: '1rem' }}>
-          Try the live simulation
-        </Link>
-        <Link to="/demo" className="btn btn-secondary" style={{ padding: '0.8rem 1.75rem', fontSize: '1rem' }}>
-          Verify the decision log yourself
-        </Link>
-      </div>
-
-      <Section>
-        <div className="features-grid" style={{ marginBottom: '3rem' }}>
-          <div className="feature-card">
-            <h3 className="feature-title">Allocate</h3>
-            <p className="feature-desc" style={{ marginTop: '0.5rem' }}>
-              capacity-limited ambulances, severity-first dispatch, hospital choice that checks reachability and stock
-            </p>
-          </div>
-          <div className="feature-card">
-            <h3 className="feature-title">Adapt</h3>
-            <p className="feature-desc" style={{ marginTop: '0.5rem' }}>
-              block or partially close roads during a run and watch ambulances reroute from where they are
-            </p>
-          </div>
-          <div className="feature-card">
-            <h3 className="feature-title">Verify</h3>
-            <p className="feature-desc" style={{ marginTop: '0.5rem' }}>
-              every decision goes into a SHA-256 hash-chained log you can verify, export and tamper-test
-            </p>
-          </div>
-        </div>
-      </Section>
-
       <Section title="What is built / what is planned">
         <div style={{ overflowX: 'auto', marginBottom: '2rem' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
@@ -164,9 +125,14 @@ export const HomePage: React.FC = () => {
         </div>
       </Section>
 
-      <div style={{ padding: '1rem', background: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.2)', borderRadius: 'var(--radius)', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-        All hospitals, ambulances and patients in the demo are synthetic. This is a hackathon prototype. It is not medically validated and not an emergency dispatch system.
-      </div>
+      <Section title="Can it handle success next week?">
+        <p style={{ marginBottom: '1rem' }}>
+          Static front end on Vercel, Supabase free tier for sign-in and scenario storage, the simulation runs entirely in the visitor's browser so simulation load does not scale with server cost.
+        </p>
+        <p>
+          Known limits: Supabase free-tier and email limits, one scenario per run in the browser, no multi-operator live control.
+        </p>
+      </Section>
     </PageShell>
   );
 };

@@ -15,7 +15,7 @@ export const Navbar: React.FC = () => {
     <header className="navbar">
       <div className="navbar-inner">
         <Link to="/" className="brand-link">
-          <div className="brand-logo">🛡️</div>
+          <div className="brand-logo">R</div>
           <div className="brand-text">
             <span className="brand-title">RESQNET</span>
             <span className="brand-tag">Team No Free Lunch (EL-02)</span>
@@ -23,12 +23,12 @@ export const Navbar: React.FC = () => {
         </Link>
 
         <nav className="nav-links">
-          <Link to="/" className="btn btn-secondary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.875rem' }}>
-            Home
-          </Link>
-          <Link to="/demo" className="btn btn-primary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.875rem' }}>
-            Demo
-          </Link>
+          <Link to="/" className="btn btn-secondary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.875rem' }}>Overview</Link>
+          <Link to="/why" className="btn btn-secondary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.875rem' }}>Why</Link>
+          <Link to="/how-it-works" className="btn btn-secondary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.875rem' }}>How it works</Link>
+          <Link to="/evidence" className="btn btn-secondary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.875rem' }}>Evidence</Link>
+          <Link to="/roadmap" className="btn btn-secondary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.875rem' }}>Roadmap</Link>
+          <Link to="/demo" className="btn btn-primary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.875rem' }}>Demo</Link>
 
           {user ? (
             <>
