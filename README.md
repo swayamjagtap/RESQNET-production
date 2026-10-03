@@ -24,7 +24,7 @@ https://resqnet-production.vercel.app/demo
 https://resqnet-production.vercel.app/graph-preview
 
 **Demo Video:**  
-_To be added after the final screen recording is uploaded._
+https://github.com/swayamjagtap/RESQNET-production/blob/main/public/demo/resqnet-demo.mp4
 
 ---
 
